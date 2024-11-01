@@ -1,0 +1,6 @@
+/target
+/logs
+.cb.env
+keys.json
+config.toml
+config.holesky.toml
