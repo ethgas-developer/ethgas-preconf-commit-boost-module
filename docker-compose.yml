@@ -1,0 +1,63 @@
+services:
+  cb_pbs:
+    image: ghcr.io/commit-boost/pbs:latest
+    container_name: cb_pbs
+    ports:
+    - 18550:18550
+    environment:
+      CB_CONFIG: /cb-config.toml
+      CB_METRICS_PORT: 10000
+      CB_LOGS_DIR: /var/logs/commit-boost
+    volumes:
+    - ./config.toml:/cb-config.toml:ro
+    - ./logs/pbs:/var/logs/commit-boost
+    networks:
+    - monitoring_network
+  cb_signer:
+    image: ghcr.io/commit-boost/signer:v0.3.0
+    container_name: cb_signer
+    environment:
+      CB_CONFIG: /cb-config.toml
+      CB_SIGNER_PORT: 20000
+      CB_METRICS_PORT: 10000
+      CB_LOGS_DIR: /var/logs/commit-boost
+      # either plain key file
+      CB_SIGNER_LOADER_FILE: /keys.json
+      # or lighthouse key dir
+      # CB_SIGNER_LOADER_KEYS_DIR: /keys
+      # CB_SIGNER_LOADER_SECRETS_DIR: /secrets
+    volumes:
+    - ./config.toml:/cb-config.toml:ro
+    # either plain key file
+    - ./keys.json:/keys.json:ro
+    # or lighthouse key dir
+    # - /path/to/data_validator/validators:/keys:ro
+    # - /path/to/data_validator/secrets:/secrets:ro
+    - ./logs/signer:/var/logs/commit-boost
+    # ports:
+    # - 20000:20000
+    env_file: .cb.env
+    networks:
+    - signer_network
+  cb_ethgas_commit:
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest
+    container_name: cb_ethgas_commit
+    environment:
+      CB_MODULE_ID: ETHGAS_COMMIT
+      CB_CONFIG: /cb-config.toml
+      CB_SIGNER_URL: http://cb_signer:20000
+      CB_METRICS_PORT: 10000
+      CB_LOGS_DIR: /var/logs/commit-boost
+    volumes:
+    - ./config.toml:/cb-config.toml:ro
+    - ./logs/ethgas_commit:/var/logs/commit-boost
+    env_file: .cb.env
+    networks:
+    - signer_network
+    depends_on:
+    - cb_signer
+networks:
+  monitoring_network:
+    driver: bridge
+  signer_network:
+    driver: bridge
