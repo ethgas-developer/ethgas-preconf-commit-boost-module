@@ -4,10 +4,6 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * `cb_signer`: It securely generates signatures from the validator BLS private keys
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` which are then sent to the ETHGas Exchange via REST API
 
-## Init
-* install Rust
-* run `cargo build`
-
 ## Config Setup
 * Copy `config.example.toml` as `config.toml`
 * Ensure some public values in `config.toml` are correct
@@ -30,15 +26,17 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * under `cb_signer` section
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
     * if `keys_path` and `secrets_path` are set in `config.toml`, then set `CB_SIGNER_LOADER_KEYS_DIR: /keys` and `CB_SIGNER_LOADER_SECRETS_DIR: /secrets`
-* Run `export CB_MODULE_ID=ETHGAS_COMMIT && cargo run --bin gen_jwt` to generate new jwt for Commit-Boost signer module
+
+## Build docker image
+* You can either use our pre-built arm64-based docker image or run `./scripts/build.sh` to build it locally
 
 ## Start the Signer module
+* Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Run `docker-compose -f docker-compose.yml up cb_signer`
 
 ## Start the ETHGas Commit module
-* You can either use our pre-built docker image or run `./scripts/build_ethgas_commit.sh` to build it locally
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
-    * you will see the log `INFO successful registration, you can start to sell preconf in ETHGas!` if all goes well
+    * you will see the log `INFO successful registration, you can now sell preconfs on ETHGas!` if all goes well
 
 ## Start the PBS module
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`

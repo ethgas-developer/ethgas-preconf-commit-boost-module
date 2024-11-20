@@ -13,6 +13,15 @@ services:
     - ./logs/pbs:/var/logs/commit-boost
     networks:
     - monitoring_network
+  cb_gen_jwt:
+    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:latest
+    container_name: cb_gen_jwt
+    environment:
+      CB_MODULE_ID: ETHGAS_COMMIT
+    volumes:
+    - ./.cb.env:/app/.cb.env
+    networks:
+    - monitoring_network
   cb_signer:
     image: ghcr.io/commit-boost/signer:v0.3.0
     container_name: cb_signer

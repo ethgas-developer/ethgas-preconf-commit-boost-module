@@ -238,7 +238,7 @@ impl EthgasCommitService {
                     info!(exchange_registration_response = ?res_json_verify);
 
                     if res_json_verify.data.result == 0 {
-                        info!("successful registration, you can start to sell preconf in ETHGas!");
+                        info!("successful registration, you can now sell preconfs on ETHGas!");
                     } else {
                         error!("fail to register");
                     }
