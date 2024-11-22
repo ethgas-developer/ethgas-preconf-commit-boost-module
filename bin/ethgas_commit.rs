@@ -7,7 +7,7 @@ use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
-use std::time::Duration;
+use std::{time::Duration, error::Error};
 use reqwest::Client;
 use tokio::time::sleep;
 use hex::encode;
@@ -45,6 +45,7 @@ struct ExtraConfig {
     entity_name: String,
     is_all_pubkey: bool,
     pubkey_id: usize,
+    pubkey_end_id: usize,
     is_jwt_provided: bool,
     eoa_signing_key: B256,
     exchange_jwt: String,
@@ -188,18 +189,21 @@ impl EthgasExchangeService {
 }
 
 impl EthgasCommitService {
-    pub async fn run(self) -> Result<()> {
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let client = Client::new();
         info!(chain = ?self.config.chain); // Debug: chain
 
         let pubkeys = self.config.signer_client.get_pubkeys().await.unwrap();
 
         let pubkey_id: usize = self.config.extra.pubkey_id;
-        if pubkey_id >=pubkeys.keys.len() {
-            error!("wrong pubkey_id")
+        let mut pubkey_end_id: usize = self.config.extra.pubkey_end_id;
+        if pubkey_end_id == 0 {
+            pubkey_end_id = pubkeys.keys.len() - 1;
         }
-        let pubkeys_len = pubkeys.keys.len();
-        for i in pubkey_id..pubkeys_len {
+        if pubkey_id >= pubkeys.keys.len() || pubkey_end_id >= pubkeys.keys.len() || pubkey_id > pubkey_end_id {
+            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "wrong pubkey_id/pubkey_end_id")));
+        }
+        for i in pubkey_id..=pubkey_end_id {
             let pubkey = pubkeys.keys[i].consensus;
             info!(pubkey_id = i, ?pubkey);
 
@@ -303,7 +307,7 @@ async fn main() -> Result<()> {
             }
             let commit_service = EthgasCommitService { config, exchange_jwt };
             if let Err(err) = commit_service.run().await {
-                error!(?err, "Service failed");
+                error!(?err);
             }
         }
         Err(err) => {

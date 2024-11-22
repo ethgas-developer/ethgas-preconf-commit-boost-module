@@ -20,7 +20,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * ensure `exchange_api_base = "https://testnetapp.ethgas.com"`
     * set your `entity_name`
     * if `is_all_pubkey = true`, then all validator public keys inside keys directory or file will be registered in ETHGas Exchange. if `is_all_pubkey = false`, only the validator public key of `pubkey_id` will be registered
-    * `pubkey_id` indicates either the starting id or the specific id depending on `is_all_pubkey`
+    * `pubkey_id` indicates either the start id or the specific id depending on `is_all_pubkey`
+    * `pubkey_end_id` indicates the end id if you only want to register some of the validator public keys
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `eoa_signing_key` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt`
 * Set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
@@ -38,7 +39,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Start the ETHGas Commit module
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
     * you will see the log `INFO successful registration, you can now sell preconfs on ETHGas!` if all goes well
-    * if the module encounters `ConnectionRefused` error when it tries to connect to `http://0.0.0.0:20000/signer/v1/get_pubkeys`, please wait for 20 minutes to retry
+    * if the module encounters `ConnectionRefused` error when it tries to connect to `http://cb_signer:20000/signer/v1/get_pubkeys`, please wait for 20 minutes to retry
 
 ## Start the PBS module
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
