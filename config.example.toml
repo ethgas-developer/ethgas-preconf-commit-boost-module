@@ -108,7 +108,7 @@ type = "commit"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://testnetapp.ethgas.com"
 chain_id = "4268" # in hex format
-entity_name = "" # kiln, p2p, blockdaemon, coinbase, piertwo, figment, stakefish, everstake, chorus_one, sensei_node, bcw, ssv, node_monster, a41, solo, other
+entity_name = "" # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 is_all_pubkey = true
 pubkey_id = 0 # starting id if is_all_pubkey = true
 env_file = ".cb.env"

@@ -27,8 +27,9 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
     * if `keys_path` and `secrets_path` are set in `config.toml`, then set `CB_SIGNER_LOADER_KEYS_DIR: /keys` and `CB_SIGNER_LOADER_SECRETS_DIR: /secrets`
 
-## Build docker image
-* You can either use our pre-built arm64-based docker image or run `./scripts/build.sh` to build it locally
+## Build docker images
+* For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
+* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or run [this script](https://github.com/Commit-Boost/commit-boost-client/blob/main/scripts/build_local_images.sh) to build it locally
 
 ## Start the Signer module
 * Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
@@ -37,6 +38,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Start the ETHGas Commit module
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
     * you will see the log `INFO successful registration, you can now sell preconfs on ETHGas!` if all goes well
+    * if the module encounters `ConnectionRefused` error when it tries to connect to `http://0.0.0.0:20000/signer/v1/get_pubkeys`, please wait for 20 minutes to retry
 
 ## Start the PBS module
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
