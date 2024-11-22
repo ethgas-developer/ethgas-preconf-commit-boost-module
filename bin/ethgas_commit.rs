@@ -11,6 +11,7 @@ use std::time::Duration;
 use reqwest::Client;
 use tokio::time::sleep;
 use hex::encode;
+// use tracing_subscriber::FmtSubscriber;
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -200,7 +201,7 @@ impl EthgasCommitService {
         let pubkeys_len = pubkeys.keys.len();
         for i in pubkey_id..pubkeys_len {
             let pubkey = pubkeys.keys[i].consensus;
-            info!(?pubkey);
+            info!(pubkey_id = i, ?pubkey);
 
             let mut exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
             let mut res = client.post(exchange_api_url.to_string())
@@ -213,34 +214,39 @@ impl EthgasCommitService {
                 Ok(res_json_request) => {
                     info!(exchange_signing_data = ?res_json_request);
 
-                    let info = RegisteredInfo { 
-                        address: res_json_request.data.message.unwrap().address
-                    };
-                    let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
-                    exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/verify");
+                    match res_json_request.data.message {
+                        Some(api_validator_request_response_data_message) => {
+                            let info = RegisteredInfo { 
+                                address: api_validator_request_response_data_message.address
+                            };
+                            let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
+                            exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/verify");
 
-                    // Request the signature from the signer client
-                    let signature = self.config
-                        .signer_client
-                        .request_consensus_signature(request)
-                        .await
-                        .unwrap();
+                            // Request the signature from the signer client
+                            let signature = self.config
+                                .signer_client
+                                .request_consensus_signature(request)
+                                .await
+                                .unwrap();
 
-                    res = client.post(exchange_api_url.to_string())
-                        .header("Authorization", format!("Bearer {}", self.exchange_jwt))
-                        .header("content-type", "application/json")
-                        .query(&[("publicKey", pubkey.to_string())])
-                        .query(&[("signature", signature.to_string())])
-                        .send()
-                        .await.unwrap();
+                            res = client.post(exchange_api_url.to_string())
+                                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                                .header("content-type", "application/json")
+                                .query(&[("publicKey", pubkey.to_string())])
+                                .query(&[("signature", signature.to_string())])
+                                .send()
+                                .await.unwrap();
 
-                    let res_json_verify = res.json::<APIValidatorVerifyResponse>().await.unwrap();
-                    info!(exchange_registration_response = ?res_json_verify);
+                            let res_json_verify = res.json::<APIValidatorVerifyResponse>().await.unwrap();
+                            info!(exchange_registration_response = ?res_json_verify);
 
-                    if res_json_verify.data.result == 0 {
-                        info!("successful registration, you can now sell preconfs on ETHGas!");
-                    } else {
-                        error!("fail to register");
+                            if res_json_verify.data.result == 0 {
+                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                            } else {
+                                error!("fail to register");
+                            }
+                        },
+                        None => error!("this pubkey has been registered already"),
                     }
                 },
                 Err(err) => {
@@ -268,6 +274,8 @@ async fn main() -> Result<()> {
     match load_commit_module_config::<ExtraConfig>() {
         Ok(config) => {
             let _guard = initialize_tracing_log(&config.id)?;
+            // let subscriber = FmtSubscriber::builder().finish();
+            // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
 
             info!(
                 module_id = %config.id,
