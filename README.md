@@ -44,6 +44,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Start the PBS module
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
+    * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)
