@@ -9,12 +9,9 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Ensure some public values in `config.toml` are correct
     * `chain = Holesky` and `preconf_mode = true`
     * under `[[relays]]` section, `url` of `id = "ethgas"` is `https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com`
-* Set validator BLS key directory or file in `config.toml`
-    * under `[signer.loader]` section
-    * if you use Lighthouse consensus client, set `keys_path = "/path/to/data_validator/validators"` and `secrets_path = "/path/to/data_validator/secrets"`
-        * ensure the name of all keystore files under `/path/to/data_validator/validators/0x...` are `voting-keystore.json`
-    * if you use other consensus client, copy `keys.example.json` as `keys.json` and put your validator BLS private keys inside, then set `key_path = "./keys.json"` in `config.toml`
-    * remember `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
+* For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
+    * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
+* For remote signer module, Commit Boost supports Web3Signer. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section,
     * ensure `exchange_api_base = "https://testnetapp.ethgas.com"`
@@ -27,6 +24,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * under `cb_signer` section
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
     * if `keys_path` and `secrets_path` are set in `config.toml`, then set `CB_SIGNER_LOADER_KEYS_DIR: /keys` and `CB_SIGNER_LOADER_SECRETS_DIR: /secrets`
+    * mount the correct validator keystore directories from the host machine to the container `/keys` and `/secrets` directory
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally

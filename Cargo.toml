@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "25308f05930ab2417dbd2d4edb9e61cf6395b14e" }
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "2fe6340e4761ac68a8144cfebad78a12f4970a17" }
 alloy = { version = "0.5.3", features = ["full"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

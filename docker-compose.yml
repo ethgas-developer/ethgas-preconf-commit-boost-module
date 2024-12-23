@@ -1,6 +1,6 @@
 services:
   cb_pbs:
-    image: ghcr.io/commit-boost/pbs:latest
+    image: ghcr.io/commit-boost/pbs:v0.4.0
     container_name: cb_pbs
     ports:
     - 18550:18550
@@ -23,7 +23,7 @@ services:
     networks:
     - monitoring_network
   cb_signer:
-    image: ghcr.io/commit-boost/signer:v0.3.0
+    image: ghcr.io/commit-boost/signer:v0.4.0
     container_name: cb_signer
     environment:
       CB_CONFIG: /cb-config.toml
@@ -31,17 +31,17 @@ services:
       CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
       # either plain key file
-      CB_SIGNER_LOADER_FILE: /keys.json
-      # or lighthouse key dir
-      # CB_SIGNER_LOADER_KEYS_DIR: /keys
-      # CB_SIGNER_LOADER_SECRETS_DIR: /secrets
+      # CB_SIGNER_LOADER_FILE: /keys.json
+      # or validator client keystore
+      CB_SIGNER_LOADER_KEYS_DIR: /keys
+      CB_SIGNER_LOADER_SECRETS_DIR: /secrets
     volumes:
     - ./config.toml:/cb-config.toml:ro
     # either plain key file
-    - ./keys.json:/keys.json:ro
-    # or lighthouse key dir
-    # - /path/to/data_validator/validators:/keys:ro
-    # - /path/to/data_validator/secrets:/secrets:ro
+    # - ./keys.json:/keys.json:ro
+    # or validator client keystore
+    - /path/to/data_validator/validators:/keys:ro
+    - /path/to/data_validator/secrets:/secrets:ro
     - ./logs/signer:/var/logs/commit-boost
     # ports:
     # - 20000:20000
