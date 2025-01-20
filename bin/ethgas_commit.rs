@@ -26,7 +26,8 @@ struct EthgasExchangeService {
     exchange_api_base: String,
     chain_id: String,
     entity_name: String,
-    eoa_signing_key: B256
+    eoa_signing_key: B256,
+    enable_pricer: bool,
 }
 
 struct EthgasCommitService {
@@ -49,6 +50,7 @@ struct ExtraConfig {
     is_jwt_provided: bool,
     eoa_signing_key: B256,
     exchange_jwt: String,
+    enable_pricer: bool,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -144,6 +146,11 @@ struct APIValidatorVerifyResponseData {
     description: String
 }
 
+#[derive(Debug, Deserialize)]
+struct APIEnablePricerResponse {
+    success: bool
+}
+
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
@@ -184,6 +191,37 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await.unwrap();
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify).unwrap();
         info!(exchange_jwt = ?res_json_verify);
+
+        exchange_api_url = format!("{}{}{}", self.exchange_api_base, "/api/user/pricer?enable=", self.enable_pricer);
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", res_json_verify.data.accessToken.token))
+                .header("content-type", "application/json")
+                .send()
+                .await.unwrap();
+        match res.json::<APIEnablePricerResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        if self.enable_pricer == true {
+                            info!("successfully enable pricer");
+                        } else {
+                            info!("successfully disable pricer");
+                        }
+                    },
+                    false => {
+                        if self.enable_pricer == true {
+                            error!("fail to enable pricer");
+                        } else {
+                            error!("fail to disable pricer");
+                        }
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "fail to call pricer API");
+            }
+        }
+
         Ok(res_json_verify.data.accessToken.token)
     }
 }
@@ -245,7 +283,11 @@ impl EthgasCommitService {
                             info!(exchange_registration_response = ?res_json_verify);
 
                             if res_json_verify.data.result == 0 {
-                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                                if self.config.extra.enable_pricer == true {
+                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                } else {
+                                    info!("successful registration, you can now sell preconfs on ETHGas!");
+                                }
                             } else {
                                 error!("fail to register");
                             }
@@ -292,7 +334,8 @@ async fn main() -> Result<()> {
                     exchange_api_base: config.extra.exchange_api_base.clone(),
                     chain_id: config.extra.chain_id.clone(),
                     entity_name: config.extra.entity_name.clone(),
-                    eoa_signing_key: config.extra.eoa_signing_key
+                    eoa_signing_key: config.extra.eoa_signing_key,
+                    enable_pricer: config.extra.enable_pricer,
                 };
                 
                 exchange_jwt = match exchange_service.login().await {
