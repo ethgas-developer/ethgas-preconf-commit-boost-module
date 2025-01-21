@@ -181,10 +181,12 @@ is_all_pubkey = true
 pubkey_id = 0 # start id if is_all_pubkey = true
 pubkey_end_id = 0 # end id if is_all_pubkey = true, set 0 if you want end id = end of the list
 env_file = ".cb.env"
-is_jwt_provided = false
-eoa_signing_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # for registration in exchange, placeholder value if is_jwt_provided = true
-exchange_jwt = "xxx.xxx.xxx" # placeholder value if is_jwt_provided = false
 enable_pricer = true
+is_jwt_provided = false
+# Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value.
+eoa_signing_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # for registration in exchange, required if is_jwt_provided = false
+exchange_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+
 
 # Configuration for how metrics should be collected and scraped
 # OPTIONAL, skip metrics collection if missing

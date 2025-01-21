@@ -47,10 +47,10 @@ struct ExtraConfig {
     is_all_pubkey: bool,
     pubkey_id: usize,
     pubkey_end_id: usize,
-    is_jwt_provided: bool,
-    eoa_signing_key: B256,
-    exchange_jwt: String,
     enable_pricer: bool,
+    is_jwt_provided: bool,
+    eoa_signing_key: Option<B256>,
+    exchange_jwt: Option<String>,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -334,10 +334,16 @@ async fn main() -> Result<()> {
                     exchange_api_base: config.extra.exchange_api_base.clone(),
                     chain_id: config.extra.chain_id.clone(),
                     entity_name: config.extra.entity_name.clone(),
-                    eoa_signing_key: config.extra.eoa_signing_key,
                     enable_pricer: config.extra.enable_pricer,
+                    eoa_signing_key: match config.extra.eoa_signing_key.clone() {
+                        Some(eoa) => eoa,
+                        None => {
+                            error!("Config eoa_signing_key is required but missing");
+                            return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                            "eoa_signing_key missing").into());
+                        }
+                    },
                 };
-                
                 exchange_jwt = match exchange_service.login().await {
                     Ok(value) => value,
                     Err(err) => {
@@ -346,12 +352,23 @@ async fn main() -> Result<()> {
                     }
                 };
             } else {
-                exchange_jwt = config.extra.exchange_jwt.clone();
+                exchange_jwt = match config.extra.exchange_jwt.clone() {
+                    Some(jwt) => jwt,
+                    None => {
+                        error!("Config exchange_jwt is required but missing");
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                                       "exchange_jwt missing").into());
+                    }
+                };
             }
-            let commit_service = EthgasCommitService { config, exchange_jwt };
-            if let Err(err) = commit_service.run().await {
-                error!(?err);
-            }
+            if !exchange_jwt.is_empty() {
+                let commit_service = EthgasCommitService { config, exchange_jwt };
+                if let Err(err) = commit_service.run().await {
+                    error!(?err);
+                }
+            } else { error!("JWT invalid") }
+
+
         }
         Err(err) => {
             eprintln!("Failed to load module config: {err:?}");
