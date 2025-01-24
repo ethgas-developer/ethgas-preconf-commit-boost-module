@@ -6,6 +6,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Config Setup
 * Copy `config.example.toml` as `config.toml`
+* Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Ensure some public values in `config.toml` are correct
     * `chain = Holesky` and `preconf_mode = true`
     * under `[[relays]]` section, `url` of `id = "ethgas"` is `https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com`
