@@ -6,7 +6,7 @@ use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use std::{time::Duration, error::Error};
 use reqwest::Client;
 use tokio::time::sleep;
@@ -292,7 +292,7 @@ impl EthgasCommitService {
                                 error!("fail to register");
                             }
                         },
-                        None => error!("this pubkey has been registered already"),
+                        None => warn!("this pubkey has been registered already"),
                     }
                 },
                 Err(err) => {
