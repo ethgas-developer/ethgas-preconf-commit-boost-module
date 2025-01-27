@@ -8,6 +8,8 @@ use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use std::{time::Duration, error::Error};
+use std::env;
+use std::str::FromStr;
 use reqwest::Client;
 use tokio::time::sleep;
 use hex::encode;
@@ -338,11 +340,24 @@ async fn main() -> Result<()> {
                     eoa_signing_key: match config.extra.eoa_signing_key.clone() {
                         Some(eoa) => eoa,
                         None => {
-                            error!("Config eoa_signing_key is required but missing");
+                            match env::var("EOA_SIGNING_KEY") {
+                                Ok(eoa) => {
+                                    match B256::from_str(&eoa) {
+                                        Ok(key) => key,
+                                        Err(_) => {
+                                            error!("EOA_SIGNING_KEY environment variable is not a valid 32-byte hex string");
+                                            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid EOA_SIGNING_KEY").into());
+                                        }
+                                    }
+                                },
+                                Err(_) => {
+                                    error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
                             return Err(std::io::Error::new(std::io::ErrorKind::Other,
                             "eoa_signing_key missing").into());
+                                }
+                            }
                         }
-                    },
+                    }
                 };
                 exchange_jwt = match exchange_service.login().await {
                     Ok(value) => value,
