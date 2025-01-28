@@ -8,6 +8,8 @@ use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use std::{time::Duration, error::Error};
+use std::env;
+use std::str::FromStr;
 use reqwest::Client;
 use tokio::time::sleep;
 use hex::encode;
@@ -258,7 +260,7 @@ impl EthgasCommitService {
 
                     match res_json_request.data.message {
                         Some(api_validator_request_response_data_message) => {
-                            let info = RegisteredInfo { 
+                            let info = RegisteredInfo {
                                 address: api_validator_request_response_data_message.address
                             };
                             let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
@@ -330,7 +332,7 @@ async fn main() -> Result<()> {
 
             let exchange_jwt: String;
             if config.extra.is_jwt_provided == false {
-                let exchange_service = EthgasExchangeService { 
+                let exchange_service = EthgasExchangeService {
                     exchange_api_base: config.extra.exchange_api_base.clone(),
                     chain_id: config.extra.chain_id.clone(),
                     entity_name: config.extra.entity_name.clone(),
@@ -338,11 +340,24 @@ async fn main() -> Result<()> {
                     eoa_signing_key: match config.extra.eoa_signing_key.clone() {
                         Some(eoa) => eoa,
                         None => {
-                            error!("Config eoa_signing_key is required but missing");
-                            return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                            "eoa_signing_key missing").into());
+                            match env::var("EOA_SIGNING_KEY") {
+                                Ok(eoa) => {
+                                    match B256::from_str(&eoa) {
+                                        Ok(key) => key,
+                                        Err(_) => {
+                                            error!("EOA_SIGNING_KEY environment variable is not a valid 32-byte hex string");
+                                            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid EOA_SIGNING_KEY").into());
+                                        }
+                                    }
+                                },
+                                Err(_) => {
+                                    error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
+                                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                    "eoa_signing_key missing").into());
+                                }
+                            }
                         }
-                    },
+                    }
                 };
                 exchange_jwt = match exchange_service.login().await {
                     Ok(value) => value,
@@ -355,9 +370,14 @@ async fn main() -> Result<()> {
                 exchange_jwt = match config.extra.exchange_jwt.clone() {
                     Some(jwt) => jwt,
                     None => {
-                        error!("Config exchange_jwt is required but missing");
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                                       "exchange_jwt missing").into());
+                        match env::var("EXCHANGE_JWT") {
+                            Ok(jwt) => jwt,
+                            Err(_) => {
+                                error!("Config exchange_jwt is required. Please set EXCHANGE_JWT environment variable or provide it in the config file");
+                                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                "exchange_jwt missing").into());
+                            }
+                        }
                     }
                 };
             }
