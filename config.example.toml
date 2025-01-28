@@ -183,7 +183,8 @@ pubkey_end_id = 0 # end id if is_all_pubkey = true, set 0 if you want end id = e
 env_file = ".cb.env"
 enable_pricer = true
 is_jwt_provided = false
-# Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value.
+# Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
+# Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env or as env variables
 eoa_signing_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # for registration in exchange, required if is_jwt_provided = false
 exchange_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 

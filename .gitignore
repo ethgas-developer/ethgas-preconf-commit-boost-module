@@ -5,3 +5,4 @@ keys.json
 config.toml
 config.holesky.toml
 docker-compose.yml
+.DS_Store

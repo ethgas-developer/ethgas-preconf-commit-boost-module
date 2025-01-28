@@ -7,6 +7,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Config Setup
 * Copy `config.example.toml` as `config.toml`
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
+* Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Ensure some public values in `config.toml` are correct
     * `chain = Holesky` and `preconf_mode = true`
     * under `[[relays]]` section, `url` of `id = "ethgas"` is `https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com`
@@ -20,7 +21,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * if `is_all_pubkey = true`, then all validator public keys inside keys directory or file will be registered in ETHGas Exchange. if `is_all_pubkey = false`, only the validator public key of `pubkey_id` will be registered
     * `pubkey_id` indicates either the start id or the specific id depending on `is_all_pubkey`
     * `pubkey_end_id` indicates the end id if you only want to register some of the validator public keys
-    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `eoa_signing_key` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt`
+    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
+        * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables or in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
 * Set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
@@ -33,7 +35,6 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or run [this script](https://github.com/Commit-Boost/commit-boost-client/blob/main/scripts/build_local_images.sh) to build it locally
 
 ## Start the Signer module
-* Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Run `docker-compose -f docker-compose.yml up cb_signer`
 
 ## Start the ETHGas Commit module
