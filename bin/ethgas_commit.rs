@@ -193,10 +193,18 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await.unwrap();
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify).unwrap();
         info!(exchange_jwt = ?res_json_verify);
+        Ok(res_json_verify.data.accessToken.token)
+    }
+}
 
-        exchange_api_url = format!("{}{}{}", self.exchange_api_base, "/api/user/pricer?enable=", self.enable_pricer);
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", res_json_verify.data.accessToken.token))
+impl EthgasCommitService {
+    pub async fn run(self) -> Result<(), Box<dyn Error>> {
+        let client = Client::new();
+        info!(chain = ?self.config.chain); // Debug: chain
+
+        let mut exchange_api_url = format!("{}{}{}", self.config.extra.exchange_api_base, "/api/user/pricer?enable=", self.config.extra.enable_pricer);
+        let mut res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
                 .header("content-type", "application/json")
                 .send()
                 .await.unwrap();
@@ -204,14 +212,14 @@ impl EthgasExchangeService {
             Ok(result) => {
                 match result.success {
                     true => {
-                        if self.enable_pricer == true {
+                        if self.config.extra.enable_pricer == true {
                             info!("successfully enable pricer");
                         } else {
                             info!("successfully disable pricer");
                         }
                     },
                     false => {
-                        if self.enable_pricer == true {
+                        if self.config.extra.enable_pricer == true {
                             error!("fail to enable pricer");
                         } else {
                             error!("fail to disable pricer");
@@ -223,15 +231,6 @@ impl EthgasExchangeService {
                 error!(?err, "fail to call pricer API");
             }
         }
-
-        Ok(res_json_verify.data.accessToken.token)
-    }
-}
-
-impl EthgasCommitService {
-    pub async fn run(self) -> Result<(), Box<dyn Error>> {
-        let client = Client::new();
-        info!(chain = ?self.config.chain); // Debug: chain
 
         let pubkeys = self.config.signer_client.get_pubkeys().await.unwrap();
 
@@ -247,8 +246,8 @@ impl EthgasCommitService {
             let pubkey = pubkeys.keys[i].consensus;
             info!(pubkey_id = i, ?pubkey);
 
-            let mut exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
-            let mut res = client.post(exchange_api_url.to_string())
+            exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
+            res = client.post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
                 .header("content-type", "application/json")
                 .query(&[("publicKey", pubkey.to_string())])
