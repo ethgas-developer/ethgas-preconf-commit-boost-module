@@ -36,5 +36,6 @@ fn main() {
         }
         envs_str
     };
-    std::fs::write(".cb.env", envs_str).unwrap();
+    std::fs::write(".cb.env", envs_str)
+        .expect("Failed to write environment variables to .cb.env file");
 }

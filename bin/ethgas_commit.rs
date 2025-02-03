@@ -19,9 +19,11 @@ use hex::encode;
 // your module. These will be automatically scaped by the Prometheus server
 lazy_static! {
     pub static ref MY_CUSTOM_REGISTRY: prometheus::Registry =
-        Registry::new_custom(Some("ethgas_commit".to_string()), None).unwrap();
+        Registry::new_custom(Some("ethgas_commit".to_string()), None)
+            .expect("Failed to create metrics registry");
     pub static ref SIG_RECEIVED_COUNTER: IntCounter =
-        IntCounter::new("signature_received", "successful signatures requests received").unwrap();
+        IntCounter::new("signature_received", "successful signatures requests received")
+            .expect("Failed to create signature counter");
 }
 
 struct EthgasExchangeService {
@@ -156,17 +158,19 @@ struct APIEnablePricerResponse {
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
-        let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key).unwrap();
+        let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
+            .expect("Failed to create signer from private key");
         let mut exchange_api_url = format!("{}{}", self.exchange_api_base, "/api/user/login");
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("chainId", self.chain_id.clone())])
                 .query(&[("name", self.entity_name.clone())])
                 .send()
-                .await.unwrap();
-        let res_json_login = res.json::<APILoginResponse>().await.unwrap();
+                .await?;
+        let res_json_login = res.json::<APILoginResponse>().await?;
         info!(exchange_login_eip712_message = ?res_json_login);
-        let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message).unwrap();
+        let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message)
+            .expect("Failed to parse EIP712 message");
         let eip712_domain_from_api = eip712_message.domain;
         let eip712_sub_message = eip712_message.message;
         let domain = eip712_domain! {
@@ -189,9 +193,10 @@ impl EthgasExchangeService {
                 .query(&[("nonceHash", eip712_sub_message.hash)])
                 .query(&[("signature", signature_hex)])
                 .send()
-                .await.unwrap();
-        let res_text_login_verify = res.text().await.unwrap();
-        let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify).unwrap();
+                .await?;
+        let res_text_login_verify = res.text().await?;
+        let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
+            .expect("Failed to parse login verification response");
         info!(exchange_jwt = ?res_json_verify);
         Ok(res_json_verify.data.accessToken.token)
     }
@@ -207,7 +212,7 @@ impl EthgasCommitService {
                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
                 .header("content-type", "application/json")
                 .send()
-                .await.unwrap();
+                .await?;
         match res.json::<APIEnablePricerResponse>().await {
             Ok(result) => {
                 match result.success {
@@ -232,7 +237,7 @@ impl EthgasCommitService {
             }
         }
 
-        let pubkeys = self.config.signer_client.get_pubkeys().await.unwrap();
+        let pubkeys = self.config.signer_client.get_pubkeys().await?;
 
         let pubkey_id: usize = self.config.extra.pubkey_id;
         let mut pubkey_end_id: usize = self.config.extra.pubkey_end_id;
@@ -252,7 +257,7 @@ impl EthgasCommitService {
                 .header("content-type", "application/json")
                 .query(&[("publicKey", pubkey.to_string())])
                 .send()
-                .await.unwrap();
+                .await?;
             match res.json::<APIValidatorRequestResponse>().await {
                 Ok(res_json_request) => {
                     info!(exchange_signing_data = ?res_json_request);
@@ -269,8 +274,7 @@ impl EthgasCommitService {
                             let signature = self.config
                                 .signer_client
                                 .request_consensus_signature(request)
-                                .await
-                                .unwrap();
+                                .await?;
 
                             res = client.post(exchange_api_url.to_string())
                                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
@@ -278,9 +282,11 @@ impl EthgasCommitService {
                                 .query(&[("publicKey", pubkey.to_string())])
                                 .query(&[("signature", signature.to_string())])
                                 .send()
-                                .await.unwrap();
+                                .await?;
 
-                            let res_json_verify = res.json::<APIValidatorVerifyResponse>().await.unwrap();
+                            let res_json_verify = res.json::<APIValidatorVerifyResponse>()
+                                .await
+                                .expect("Failed to parse validator verification response");
                             info!(exchange_registration_response = ?res_json_verify);
 
                             if res_json_verify.data.result == 0 {
