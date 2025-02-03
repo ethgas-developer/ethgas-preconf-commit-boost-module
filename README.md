@@ -47,6 +47,18 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 
+## Debug cb_ethgas_commit locally
+* To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`, uncomment `tracing-subscriber = "0.2"` in `Cargo.toml` and comment/uncomment relevant code in `bin/ethgas_commit.rs` according to the example below
+```
+use tracing_subscriber::FmtSubscriber;
+...
+// let _guard = initialize_tracing_log(&config.id)?;
+let subscriber = FmtSubscriber::builder().finish();
+tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+```
+* Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
+
+
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)
 * [ETHGas X / Twitter](https://x.com/ETHGASofficial)
