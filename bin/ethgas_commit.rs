@@ -7,9 +7,9 @@ use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
-use std::{time::Duration, error::Error};
-use std::env;
-use std::str::FromStr;
+use std::{
+    time::Duration, error::Error, env, str::FromStr
+};
 use reqwest::Client;
 use tokio::time::sleep;
 use hex::encode;
@@ -31,12 +31,12 @@ struct EthgasExchangeService {
     chain_id: String,
     entity_name: String,
     eoa_signing_key: B256,
-    enable_pricer: bool,
 }
 
 struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
-    exchange_jwt: String
+    exchange_jwt: String,
+    mux_pubkeys: Vec<BlsPublicKey>
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -48,9 +48,6 @@ struct ExtraConfig {
     exchange_api_base: String,
     chain_id: String,
     entity_name: String,
-    is_all_pubkey: bool,
-    pubkey_id: usize,
-    pubkey_end_id: usize,
     enable_pricer: bool,
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
@@ -239,17 +236,13 @@ impl EthgasCommitService {
 
         let pubkeys = self.config.signer_client.get_pubkeys().await?;
 
-        let pubkey_id: usize = self.config.extra.pubkey_id;
-        let mut pubkey_end_id: usize = self.config.extra.pubkey_end_id;
-        if pubkey_end_id == 0 {
-            pubkey_end_id = pubkeys.keys.len() - 1;
-        }
-        if pubkey_id >= pubkeys.keys.len() || pubkey_end_id >= pubkeys.keys.len() || pubkey_id > pubkey_end_id {
-            return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other, "wrong pubkey_id/pubkey_end_id")));
-        }
-        for i in pubkey_id..=pubkey_end_id {
+        for i in 0..pubkeys.keys.len() {
             let pubkey = pubkeys.keys[i].consensus;
             info!(pubkey_id = i, ?pubkey);
+
+            if !self.mux_pubkeys.contains(&pubkey) {
+                continue;
+            }
 
             exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
             res = client.post(exchange_api_url.to_string())
@@ -306,9 +299,6 @@ impl EthgasCommitService {
                     error!(?err, "fail to request for signing data");
                 }
             }
-            if self.config.extra.is_all_pubkey == false {
-                break;
-            }
             sleep(Duration::from_millis(500)).await;
         }
         Ok(())
@@ -335,13 +325,34 @@ async fn main() -> Result<()> {
                 "Starting module with custom data"
             );
 
+            let pbs_config = match load_pbs_config() {
+                Ok(config) => config,
+                Err(err) => {
+                    error!("Failed to load pbs config: {err:?}");
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to load pbs config").into());
+                }
+            };
+
+            let mux_pubkeys = match pbs_config.muxes {
+                Some(mux_map) => {
+                    let mut vec = Vec::new();
+                    for (key, value) in mux_map.iter() {
+                        if value.id == "ethgas_mux" {
+                            vec.push(BlsPublicKey::from(*key));
+                        }
+                    }
+                    vec
+                },
+                None => Vec::new()
+            };
+            info!("mux_pubkeys: {:?}", mux_pubkeys);
+
             let exchange_jwt: String;
             if config.extra.is_jwt_provided == false {
                 let exchange_service = EthgasExchangeService {
                     exchange_api_base: config.extra.exchange_api_base.clone(),
                     chain_id: config.extra.chain_id.clone(),
                     entity_name: config.extra.entity_name.clone(),
-                    enable_pricer: config.extra.enable_pricer,
                     eoa_signing_key: match config.extra.eoa_signing_key.clone() {
                         Some(eoa) => eoa,
                         None => {
@@ -387,7 +398,7 @@ async fn main() -> Result<()> {
                 };
             }
             if !exchange_jwt.is_empty() {
-                let commit_service = EthgasCommitService { config, exchange_jwt };
+                let commit_service = EthgasCommitService { config, exchange_jwt, mux_pubkeys };
                 if let Err(err) = commit_service.run().await {
                     error!(?err);
                 }
