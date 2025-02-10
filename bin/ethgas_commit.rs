@@ -241,6 +241,7 @@ impl EthgasCommitService {
             info!(pubkey_id = i, ?pubkey);
 
             if !self.mux_pubkeys.contains(&pubkey) {
+                info!("this pubkey is skipped for registration");
                 continue;
             }
 
@@ -337,8 +338,11 @@ async fn main() -> Result<()> {
                 Some(mux_map) => {
                     let mut vec = Vec::new();
                     for (key, value) in mux_map.iter() {
-                        if value.id == "ethgas_mux" {
-                            vec.push(BlsPublicKey::from(*key));
+                        for relay in value.relays.iter() {
+                            if relay.id.contains("ethgas") {
+                                vec.push(BlsPublicKey::from(*key));
+                                break;
+                            }
                         }
                     }
                     vec

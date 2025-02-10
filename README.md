@@ -18,7 +18,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * under `[[modules]]` section,
     * ensure `exchange_api_base = "https://testnetapp.ethgas.com"`
     * set your `entity_name`
-    * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id = "ethgas_mux"` is specified in the config, then only those `validator_pubkeys` will be registered.
+    * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables or in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
