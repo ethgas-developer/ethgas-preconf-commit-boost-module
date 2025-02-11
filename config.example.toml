@@ -1,14 +1,17 @@
 # The main configuration file for the Commit-Boost sidecar.
 # Some fields are optional and can be omitted, in which case the default value, if present, will be used.
 
-# Chain spec id. Supported values: Mainnet, Holesky, Helder
+# Chain spec ID. Supported values:
+# A network ID. Supported values: Mainnet, Holesky, Sepolia, Helder.
+# A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
+# A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
 chain = "Holesky" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module
 [pbs]
 # Docker image to use for the PBS module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/pbs:latest
-docker_image = "ghcr.io/commit-boost/pbs:v0.4.0"
+docker_image = "ghcr.io/commit-boost/pbs:v0.6.0"
 # Whether to enable the PBS module to request signatures from the Signer module (not used in the default PBS image)
 # OPTIONAL, DEFAULT: false
 with_signer = false
@@ -34,7 +37,7 @@ timeout_get_payload_ms = 4000
 # Timeout in milliseconds for the `register_validator` call to relays.
 # OPTIONAL, DEFAULT: 3000
 timeout_register_validator_ms = 3000
-# Whether to skip signature verification of headers against the relay pubkey
+# Whether to skip signature verification of headers and pubkey matching against the relay pubkey
 # OPTIONAL, DEFAULT: false
 skip_sigverify = false
 # Minimum bid in ETH that will be accepted from `get_header`
@@ -54,14 +57,15 @@ late_in_slot_time_ms = 2000
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
-# rpc_url = "http://abc.xyz"
+# rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
+# Relay ID to use in telemetry
+# OPTIONAL, DEFAULT: URL hostname
 id = "ethgas"
 # Relay URL in the format scheme://pubkey@host
 url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com"
-
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
@@ -92,32 +96,40 @@ target_first_request_ms = 200
 # Frequency in ms to send get_header requests
 # OPTIONAL
 frequency_get_header_ms = 300
+# Maximum number of validators to register in a single request.
+# OPTIONAL, DEFAULT: "" (unlimited)
+validator_registration_batch_size = ""
 
-# # Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
-# # Note that:
-# # - multiple sets of keys can be defined by adding multiple [[mux]] sections. The validator pubkey sets need to be disjoint
-# # - the mux is only used for get header requests
-# # - if any value is missing from the mux config, the default value from the main config will be used
+# Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
+# Note that:
+# - multiple sets of keys can be defined by adding multiple [[mux]] sections. The validator pubkey sets need to be disjoint
+# - the mux is only used for get header requests
+# - if any value is missing from the mux config, the default value from the main config will be used
 # [[mux]]
-# # Unique ID for the mux config
-# id = "test_mux"
-# # Which validator pubkeys to match against this mux config. This can be empty or omitted if a loader is specified.
-# # Any keys loaded via the loader will be added to this list.
+# Unique ID for the mux config
+# id = "ethgas_mux"
+# Which validator pubkeys to match against this mux config. This can be empty or omitted if a loader is specified.
+# Any keys loaded via the loader will be added to this list.
 # validator_pubkeys = [
 #     "0x80c7f782b2467c5898c5516a8b6595d75623960b4afc4f71ee07d40985d20e117ba35e7cd352a3e75fb85a8668a3b745",
 #     "0xa119589bb33ef52acbb8116832bec2b58fca590fe5c85eac5d3230b44d5bc09fe73ccd21f88eab31d6de16194d17782e",
 # ]
-# # Path to a file containing a list of validator pubkeys
-# # OPTIONAL
-# loader = "./mux_keys.example.json"
+# Path to a file containing a list of validator pubkeys or details of a registry to load keys from.
+# Supported registries:
+#   - Lido: NodeOperatorsRegistry
+#   - SSV: SSV API
+# OPTIONAL
+# loader = "/tests/data/mux_keys.example.json"
+# loader = { registry = "lido", node_operator_id = 8 }
+# loader = { registry = "ssv", node_operator_id = 8 }
 # timeout_get_header_ms = 900
 # late_in_slot_time_ms = 1500
-# # For each mux, one or more [[pbs_mux.relays]] can be defined, which will be used for the matching validator pubkeys
-# # Only the relays defined here will be used, and the rest of the relays defined in the main config will be ignored
-# # Any field defined here will override the default value from the relay config with the same id in [[relays]]
+# For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys
+# Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored
+# The fields specified here are the same as in [[relays]] (headers, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
 # [[mux.relays]]
-# id = "example-relay"
-# headers = { X-MyCustomHeader = "ADifferentCustomValue" }
+# id = "ethgas"
+# url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com"
 
 # Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`
 # Currently two types of Signer modules are supported (only one can be used at a time):
@@ -133,13 +145,13 @@ frequency_get_header_ms = 300
 [signer.local]
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
-docker_image = "ghcr.io/commit-boost/signer:v0.4.0"
+docker_image = "ghcr.io/commit-boost/signer:v0.6.0"
 # Configuration for how the Signer module should load validator keys. Currently two types of loaders are supported:
 #   - File: load keys from a plain text file (unsafe, use only for testing purposes)
 #   - ValidatorsDir: load keys from a `keys` and `secrets` file/folder (ERC-2335 style keystores). More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/)
 [signer.local.loader]
 # File: path to the keys file
-# key_path = "./keys.json"
+# key_path = "./tests/data/keys.example.json"
 # ValidatorsDir: format of the keystore (lighthouse, prysm, teku or lodestar)
 format = "lighthouse"
 # ValidatorsDir: full path to the keys directory
@@ -154,8 +166,9 @@ keys_path = "/path/to/data_validator/validators"
 # For teku, it's the path to the directory where all `<pubkey>.txt` files are located.
 # For lodestar, it's the path to the file containing the decryption password.
 secrets_path = "/path/to/data_validator/secrets"
-# Configuration for how the Signer module should store proxy delegations. Currently one type of store is supported:
+# Configuration for how the Signer module should store proxy delegations. Supported types of store are:
 #   - File: store keys and delegations from a plain text file (unsafe, use only for testing purposes)
+#   - ERC2335: store keys and delegations safely using ERC-2335 style keystores. More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration#proxy-keys-store)
 # OPTIONAL, if missing proxies are lost on restart
 # [signer.local.store]
 # File: path to the keys file
@@ -177,14 +190,11 @@ docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://testnetapp.ethgas.com"
 chain_id = "4268" # in hex format
 entity_name = "" # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
-is_all_pubkey = true
-pubkey_id = 0 # start id if is_all_pubkey = true
-pubkey_end_id = 0 # end id if is_all_pubkey = true, set 0 if you want end id = end of the list
 env_file = ".cb.env"
 enable_pricer = true
 is_jwt_provided = false
 # Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
-# Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env or as env variables
+# Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env as env variables
 eoa_signing_key = "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80" # for registration in exchange, required if is_jwt_provided = false
 exchange_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 
@@ -203,10 +213,13 @@ host = "127.0.0.1"
 #       - /etc/prometheus/targets.json
 # ```
 # and use the `targets.json` file generated by `commit-boost-cli init`
-prometheus_config = "./docker/prometheus.yml"
+prometheus_config = "./provisioning/prometheus.yml"
 # Whether to start Grafana with built-in dashboards
 # OPTIONAL, DEFAULT: true
 use_grafana = false
+# Path to a folder containing a `dashboards` and `datasources` folder for Grafana.
+# OPTIONAL
+grafana_path = "./provisioning/grafana"
 # Whether to start cadvisor for system monitoring
 # OPTIONAL, DEFAULT: true
 use_cadvisor = false
