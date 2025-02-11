@@ -9,7 +9,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Ensure some public values in `config.toml` are correct
-    * `chain = Holesky` and `preconf_mode = true`
+    * `chain = Holesky`
     * under `[[relays]]` section, `url` of `id = "ethgas"` is `https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com`
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
@@ -20,7 +20,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set your `entity_name`
     * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
-        * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables or in `.cb.env`
+        * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
 * Set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
