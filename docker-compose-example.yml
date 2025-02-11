@@ -11,6 +11,8 @@ services:
     volumes:
     - ./config.toml:/cb-config.toml:ro
     - ./logs/pbs:/var/logs/commit-boost
+    # for mux keys
+    # - ./tests/data/mux_keys.json:/tests/data/mux_keys.json
     networks:
     - monitoring_network
   cb_gen_jwt:
@@ -60,6 +62,8 @@ services:
     volumes:
     - ./config.toml:/cb-config.toml:ro
     - ./logs/ethgas_commit:/var/logs/commit-boost
+    # for mux keys
+    # - ./tests/data/mux_keys.json:/tests/data/mux_keys.json
     env_file: .cb.env
     networks:
     - signer_network

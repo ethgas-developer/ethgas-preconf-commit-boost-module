@@ -119,7 +119,7 @@ validator_registration_batch_size = ""
 #   - Lido: NodeOperatorsRegistry
 #   - SSV: SSV API
 # OPTIONAL
-# loader = "./tests/data/mux_keys.example.json"
+# loader = "/tests/data/mux_keys.example.json"
 # loader = { registry = "lido", node_operator_id = 8 }
 # loader = { registry = "ssv", node_operator_id = 8 }
 # timeout_get_header_ms = 900
