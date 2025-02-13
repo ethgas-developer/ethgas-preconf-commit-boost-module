@@ -40,7 +40,7 @@ services:
     volumes:
     - ./config.toml:/cb-config.toml:ro
     # either plain key file
-    # - ./keys.json:/keys.json:ro
+    # - ./tests/data/keys.json:/keys.json:ro
     # or validator client keystore
     - /path/to/data_validator/validators:/keys:ro
     - /path/to/data_validator/secrets:/secrets:ro
