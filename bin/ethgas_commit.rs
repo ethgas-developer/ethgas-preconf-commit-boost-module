@@ -156,7 +156,8 @@ impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
-            .expect("Failed to create signer from private key");
+            .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+        
         let mut exchange_api_url = format!("{}{}", self.exchange_api_base, "/api/user/login");
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
@@ -164,10 +165,12 @@ impl EthgasExchangeService {
                 .query(&[("name", self.entity_name.clone())])
                 .send()
                 .await?;
+                
         let res_json_login = res.json::<APILoginResponse>().await?;
         info!(exchange_login_eip712_message = ?res_json_login);
+        
         let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message)
-            .expect("Failed to parse EIP712 message");
+            .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
         let eip712_domain_from_api = eip712_message.domain;
         let eip712_sub_message = eip712_message.message;
         let domain = eip712_domain! {
@@ -234,16 +237,20 @@ impl EthgasCommitService {
             }
         }
 
-        let pubkeys = self.config.signer_client.get_pubkeys().await?;
-
-        for i in 0..pubkeys.keys.len() {
-            let pubkey = pubkeys.keys[i].consensus;
-            info!(pubkey_id = i, ?pubkey);
-
-            if !self.mux_pubkeys.contains(&pubkey) {
-                info!("this pubkey is skipped for registration");
-                continue;
+        let pubkeys = if !self.mux_pubkeys.is_empty() {
+            self.mux_pubkeys
+        } else {
+            let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
+            let mut client_pubkeys = Vec::new();
+            for proxy_map in client_pubkeys_response.keys {
+                client_pubkeys.push(proxy_map.consensus);
             }
+            client_pubkeys
+        };
+
+        for i in 0..pubkeys.len() {
+            let pubkey = pubkeys[i];
+            info!(pubkey_id = i, ?pubkey);
 
             exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
             res = client.post(exchange_api_url.to_string())
@@ -278,19 +285,21 @@ impl EthgasCommitService {
                                 .send()
                                 .await?;
 
-                            let res_json_verify = res.json::<APIValidatorVerifyResponse>()
-                                .await
-                                .expect("Failed to parse validator verification response");
-                            info!(exchange_registration_response = ?res_json_verify);
-
-                            if res_json_verify.data.result == 0 {
-                                if self.config.extra.enable_pricer == true {
-                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
-                                } else {
-                                    info!("successful registration, you can now sell preconfs on ETHGas!");
-                                }
-                            } else {
-                                error!("fail to register");
+                            match res.json::<APIValidatorVerifyResponse>().await {
+                                Ok(res_json_verify) => {
+                                    info!(exchange_registration_response = ?res_json_verify);
+                                    
+                                    if res_json_verify.data.result == 0 {
+                                        if self.config.extra.enable_pricer {
+                                            info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                        } else {
+                                            info!("successful registration, you can now sell preconfs on ETHGas!");
+                                        }
+                                    } else {
+                                        error!("fail to register");
+                                    }
+                                },
+                                Err(e) => error!("Failed to parse validator verification response: {}", e)
                             }
                         },
                         None => warn!("this pubkey has been registered already"),
@@ -349,7 +358,6 @@ async fn main() -> Result<()> {
                 },
                 None => Vec::new()
             };
-            info!("mux_pubkeys: {:?}", mux_pubkeys);
 
             let exchange_jwt: String;
             if config.extra.is_jwt_provided == false {
@@ -411,7 +419,8 @@ async fn main() -> Result<()> {
 
         }
         Err(err) => {
-            eprintln!("Failed to load module config: {err:?}");
+            error!("Failed to load module config: {:?}", err);
+            return Err(err);
         }
     }
     Ok(())
