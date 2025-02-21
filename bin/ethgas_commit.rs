@@ -10,8 +10,9 @@ use tracing::{error, info, warn};
 use std::{
     time::Duration, error::Error, env, str::FromStr
 };
-use reqwest::Client;
+use reqwest::{Client, Url};
 use tokio::time::sleep;
+use tokio_retry::{Retry, strategy::FixedInterval};
 use hex::encode;
 // use tracing_subscriber::FmtSubscriber;
 
@@ -158,7 +159,7 @@ impl EthgasExchangeService {
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
         
-        let mut exchange_api_url = format!("{}{}", self.exchange_api_base, "/api/user/login");
+        let mut exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/user/login"))?;
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("chainId", self.chain_id.clone())])
@@ -187,7 +188,7 @@ impl EthgasExchangeService {
         let hash = message.eip712_signing_hash(&domain);
         let signature = signer.clone().sign_hash(&hash).await?;
         let signature_hex = encode(signature.as_bytes());
-        exchange_api_url = format!("{}{}", self.exchange_api_base, "/api/user/login/verify");
+        exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/user/login/verify"))?;
         res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("nonceHash", eip712_sub_message.hash)])
@@ -197,7 +198,7 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
-        info!(exchange_jwt = ?res_json_verify);
+        info!("successfully obtain JWT from the exchange");
         Ok(res_json_verify.data.accessToken.token)
     }
 }
@@ -207,7 +208,7 @@ impl EthgasCommitService {
         let client = Client::new();
         info!(chain = ?self.config.chain); // Debug: chain
 
-        let mut exchange_api_url = format!("{}{}{}", self.config.extra.exchange_api_base, "/api/user/pricer?enable=", self.config.extra.enable_pricer);
+        let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/user/pricer?enable=", self.config.extra.enable_pricer))?;
         let mut res = client.post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
                 .header("content-type", "application/json")
@@ -252,7 +253,7 @@ impl EthgasCommitService {
             let pubkey = pubkeys[i];
             info!(pubkey_id = i, ?pubkey);
 
-            exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request");
+            exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/request"))?;
             res = client.post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
                 .header("content-type", "application/json")
@@ -269,7 +270,7 @@ impl EthgasCommitService {
                                 address: api_validator_request_response_data_message.address
                             };
                             let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
-                            exchange_api_url = format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/verify");
+                            exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/validator/verification/verify"))?;
 
                             // Request the signature from the signer client
                             let signature = self.config
@@ -370,13 +371,10 @@ async fn main() -> Result<()> {
                         None => {
                             match env::var("EOA_SIGNING_KEY") {
                                 Ok(eoa) => {
-                                    match B256::from_str(&eoa) {
-                                        Ok(key) => key,
-                                        Err(_) => {
-                                            error!("EOA_SIGNING_KEY environment variable is not a valid 32-byte hex string");
-                                            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid EOA_SIGNING_KEY").into());
-                                        }
-                                    }
+                                    B256::from_str(&eoa).map_err(|_| {
+                                        error!("Invalid EOA_SIGNING_KEY format"); 
+                                        std::io::Error::new(std::io::ErrorKind::InvalidData, "EOA_SIGNING_KEY format error")
+                                    })?
                                 },
                                 Err(_) => {
                                     error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
@@ -387,13 +385,18 @@ async fn main() -> Result<()> {
                         }
                     }
                 };
-                exchange_jwt = match exchange_service.login().await {
-                    Ok(value) => value,
-                    Err(err) => {
+                exchange_jwt = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
+                    let service = EthgasExchangeService {
+                        exchange_api_base: exchange_service.exchange_api_base.clone(),
+                        chain_id: exchange_service.chain_id.clone(),
+                        entity_name: exchange_service.entity_name.clone(),
+                        eoa_signing_key: exchange_service.eoa_signing_key.clone(),
+                    };
+                    service.login().await.map_err(|err| {
                         error!(?err, "Service failed");
-                        return Err(err);
-                    }
-                };
+                        err
+                    })
+                }).await?;
             } else {
                 exchange_jwt = match config.extra.exchange_jwt.clone() {
                     Some(jwt) => jwt,
