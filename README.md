@@ -22,6 +22,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
+    * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
 * Set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`

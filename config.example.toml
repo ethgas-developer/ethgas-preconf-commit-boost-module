@@ -191,6 +191,7 @@ exchange_api_base = "https://testnetapp.ethgas.com"
 chain_id = "4268" # in hex format
 entity_name = "" # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 env_file = ".cb.env"
+wait_interval_in_second = 0
 enable_pricer = true
 is_jwt_provided = false
 # Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
