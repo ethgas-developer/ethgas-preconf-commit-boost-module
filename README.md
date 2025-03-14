@@ -5,18 +5,14 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` which are then sent to the ETHGas Exchange via REST API
 
 ## Config Setup
-* Copy `config.example.toml` as `config.toml`
+* Copy one of the `config.example.xxx.toml` as `config.toml`
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
-* Ensure some public values in `config.toml` are correct
-    * `chain = Holesky`
-    * under `[[relays]]` section, `url` of `id = "ethgas"` is `https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com`
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
 * For remote signer module, Commit Boost supports Web3Signer. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section,
-    * ensure `exchange_api_base = "https://testnetapp.ethgas.com"`
     * set your `entity_name`
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
