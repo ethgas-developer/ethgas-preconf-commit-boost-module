@@ -194,6 +194,8 @@ env_file = ".cb.env"
 wait_interval_in_second = 0
 enable_pricer = true
 enable_registration = true
+enable_builder = false
+builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
 # Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env as env variables

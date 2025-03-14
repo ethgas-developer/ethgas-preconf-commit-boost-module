@@ -53,6 +53,8 @@ struct ExtraConfig {
     wait_interval_in_second: u32,
     enable_pricer: bool,
     enable_registration: bool,
+    enable_builder: bool,
+    builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
     exchange_jwt: Option<String>,
@@ -168,6 +170,11 @@ struct APIEnablePricerResponse {
     success: bool
 }
 
+#[derive(Debug, Deserialize)]
+struct APIEnableBuilderResponse {
+    success: bool
+}
+
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
@@ -250,6 +257,36 @@ impl EthgasCommitService {
             },
             Err(err) => {
                 error!(?err, "fail to call pricer API");
+            }
+        }
+
+        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKey=", self.config.extra.builder_pubkey))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APIEnableBuilderResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        if self.config.extra.enable_builder == true {
+                            info!("successfully delegate to builder {}", self.config.extra.builder_pubkey);
+                        } else {
+                            info!("successfully disable builder delegation");
+                        }
+                    },
+                    false => {
+                        if self.config.extra.enable_builder == true {
+                            error!("fail to enable builder delegation");
+                        } else {
+                            error!("fail to disable builder delegation");
+                        }
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "fail to call builder delegation API");
             }
         }
 
