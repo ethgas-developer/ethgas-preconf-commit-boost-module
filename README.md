@@ -2,7 +2,7 @@
 First and foremost, we would like to give a big shout out to the Commit-Boost team for making Ethereum a more open and cooperative environment! This repo allows you to run all Commit-Boost components related to ETHGas in Docker. There are 3 main components, i.e.
 * `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
 * `cb_signer`: It securely generates signatures from the validator BLS private keys
-* `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` which are then sent to the ETHGas Exchange via REST API
+* `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 
 ## Config Setup
 * Copy one of the `config.example.xxx.toml` as `config.toml`
@@ -20,7 +20,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
     * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
-    * The config is reloaded before every re-run of the module
+    * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * Set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
