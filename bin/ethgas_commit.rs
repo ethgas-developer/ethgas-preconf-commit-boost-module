@@ -14,6 +14,7 @@ use reqwest::{Client, Url};
 use tokio::time::sleep;
 use tokio_retry::{Retry, strategy::FixedInterval};
 use hex::encode;
+use rust_decimal::Decimal;
 // use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
@@ -54,6 +55,7 @@ struct ExtraConfig {
     enable_pricer: bool,
     enable_registration: bool,
     enable_builder: bool,
+    collateral_per_slot: String,
     builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
@@ -175,6 +177,11 @@ struct APIEnableBuilderResponse {
     success: bool
 }
 
+#[derive(Debug, Deserialize)]
+struct APIValidatorSettingsResponse {
+    success: bool
+}
+
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
@@ -290,6 +297,28 @@ impl EthgasCommitService {
             },
             Err(err) => {
                 error!(?err, "fail to call builder delegation API");
+            }
+        }
+
+        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APIValidatorSettingsResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
+                    },
+                    false => {
+                        error!("fail to set collateral per slot");
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "fail to call validator collateral setting API");
             }
         }
 
@@ -427,6 +456,12 @@ async fn main() -> Result<()> {
                         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to load pbs config").into());
                     }
                 };
+
+                let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
+                if collateral_per_slot < Decimal::new(1, 1) || collateral_per_slot.scale() > 1 {
+                    error!("collateral_per_slot must be >= 0.1 ETH & no more than 1 decimal place");
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "collateral_per_slot must be >= 0.1 ETH & no more than 1 decimal place").into());
+                }
 
                 let mux_pubkeys = match pbs_config.muxes {
                     Some(mux_map) => {
