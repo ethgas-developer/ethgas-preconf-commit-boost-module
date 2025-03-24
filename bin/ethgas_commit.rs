@@ -30,7 +30,7 @@ lazy_static! {
 
 struct EthgasExchangeService {
     exchange_api_base: String,
-    chain_id: String,
+    chain_id: Option<String>, // not required, only for backward compatibility 
     entity_name: String,
     eoa_signing_key: B256,
 }
@@ -48,7 +48,7 @@ struct EthgasCommitService {
 #[derive(Debug, Deserialize)]
 struct ExtraConfig {
     exchange_api_base: String,
-    chain_id: String,
+    chain_id: Option<String>, // not required, only for backward compatibility 
     entity_name: String,
     wait_interval_in_second: u32,
     enable_pricer: bool,
@@ -212,6 +212,7 @@ impl EthgasExchangeService {
         let signature_hex = encode(signature.as_bytes());
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login/verify"))?;
         res = client.post(exchange_api_url.to_string())
+                .header("User-Agent", "cb_ethgas_commit")
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("nonceHash", eip712_sub_message.hash)])
                 .query(&[("signature", signature_hex)])
@@ -222,6 +223,8 @@ impl EthgasExchangeService {
             .expect("Failed to parse login verification response");
         info!("successfully obtain JWT from the exchange");
         Ok(res_json_verify.data.accessToken.token)
+        // println!("API Response as JSON: {}", res.json::<Value>().await?);
+        // Ok(String::from("test"))
     }
 }
 
