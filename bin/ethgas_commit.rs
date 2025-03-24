@@ -458,26 +458,10 @@ async fn main() -> Result<()> {
                 };
 
                 let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot < Decimal::new(1, 1) || collateral_per_slot.scale() > 1 {
-                    error!("collateral_per_slot must be >= 0.1 ETH & no more than 1 decimal place");
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "collateral_per_slot must be >= 0.1 ETH & no more than 1 decimal place").into());
+                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 1) || collateral_per_slot.scale() > 1) {
+                    error!("collateral_per_slot must be 0 or >= 0.1 ETH & no more than 1 decimal place");
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
                 }
-
-                let mux_pubkeys = match pbs_config.muxes {
-                    Some(mux_map) => {
-                        let mut vec = Vec::new();
-                        for (key, value) in mux_map.iter() {
-                            for relay in value.relays.iter() {
-                                if relay.id.contains("ethgas") {
-                                    vec.push(BlsPublicKey::from(*key));
-                                    break;
-                                }
-                            }
-                        }
-                        vec
-                    },
-                    None => Vec::new()
-                };
 
                 let exchange_jwt: String;
                 if config.extra.is_jwt_provided == false {
@@ -531,12 +515,31 @@ async fn main() -> Result<()> {
                         }
                     };
                 }
+
+                let mux_pubkeys = match pbs_config.muxes {
+                    Some(mux_map) => {
+                        let mut vec = Vec::new();
+                        for (key, value) in mux_map.iter() {
+                            for relay in value.relays.iter() {
+                                if relay.id.contains("ethgas") {
+                                    vec.push(BlsPublicKey::from(*key));
+                                    break;
+                                }
+                            }
+                        }
+                        vec
+                    },
+                    None => Vec::new()
+                };
+
                 if !exchange_jwt.is_empty() {
                     let commit_service = EthgasCommitService { config, exchange_jwt, mux_pubkeys };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }
-                } else { error!("JWT invalid") }
+                } else { 
+                    error!("JWT invalid") 
+                }
 
 
             }

@@ -20,7 +20,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
-    * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and must be >= 0.1 and no more than 1 decimal place
+    * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or >= 0.1 and no more than 1 decimal place
     * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * Set validator BLS key directory or file in `docker-compose.yml`
