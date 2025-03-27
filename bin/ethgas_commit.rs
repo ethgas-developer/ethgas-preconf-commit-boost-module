@@ -410,7 +410,7 @@ impl EthgasCommitService {
                         if res_json_request.success {
                             info!("successful de-registration!");
                         } else {
-                            info!("fail to de-register");
+                            error!("fail to de-register");
                         }
                     },
                     Err(err) => {
