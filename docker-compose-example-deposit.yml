@@ -1,0 +1,14 @@
+services:
+  cb_ethgas_deposit:
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest
+    container_name: cb_ethgas_deposit
+    environment:
+      CB_MODULE_ID: ETHGAS_DEPOSIT
+      CB_CONFIG: /cb-config.toml
+      # CB_SIGNER_URL: http://cb_signer:20000
+      # CB_METRICS_PORT: 10000
+      CB_LOGS_DIR: /var/logs/commit-boost
+    volumes:
+    - ./config.toml:/cb-config.toml:ro
+    - ./logs/ethgas_deposit:/var/logs/commit-boost
+    env_file: .cb.env

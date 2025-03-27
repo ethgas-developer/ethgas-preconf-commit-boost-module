@@ -19,7 +19,7 @@ use tokio::time::{timeout, sleep};
 use tokio_retry::{Retry, strategy::FixedInterval};
 use hex::encode;
 use rust_decimal::Decimal;
-use chrono::{DateTime, Utc};
+use chrono::DateTime;
 // use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
@@ -44,7 +44,8 @@ struct EthgasExchangeService {
 struct EthgasDepositService {
     exchange_api_base: String,
     rpc_url: Url,
-    collateral_per_slot: Decimal,
+    collateral_to_be_deposited: Decimal,
+    collateral_contract: alloy::primitives::Address,
     eoa_signing_key: B256,
     exchange_jwt: String
 }
@@ -58,7 +59,8 @@ struct ExtraConfig {
     exchange_api_base: String,
     chain_id: Option<String>, // not required, only for backward compatibility 
     entity_name: String,
-    collateral_per_slot: String,
+    collateral_to_be_deposited: String,
+    collateral_contract: alloy::primitives::Address,
     eoa_signing_key: Option<B256>,
 }
 
@@ -294,13 +296,12 @@ impl EthgasDepositService {
             Ok(result) => {
                 match result.success {
                     true => {
-                        info!("collaterl contract address: {}", result.data.contractAddress);
                         result.data.contractAddress
                     },
                     false => {
-                        error!("fail to get collateral contract address");
+                        error!("fail to get collateral contract address from exchange");
                         return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                            "fail to get collateral contract address").into());
+                            "fail to get collateral contract address from exchange").into());
                     }
                 }
             },
@@ -310,7 +311,14 @@ impl EthgasDepositService {
                     "fail to call contract address API").into());
             }
         };
-        self.deposit(self.collateral_per_slot, ethgas_pool_addr).await?;
+        if ethgas_pool_addr == self.collateral_contract {
+            info!("collaterl contract address: {}", ethgas_pool_addr);
+        } else {
+            error!("collateral contract address from exchange and the config are different");
+                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "collateral contract address from exchange and the config are different").into());
+        }
+        self.deposit(self.collateral_to_be_deposited, ethgas_pool_addr).await?;
         info!("waiting for 1 minute to confirm the deposit in the exchange...");
         sleep(Duration::from_secs(60)).await;
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/funding/deposits"))?;
@@ -377,7 +385,7 @@ impl EthgasDepositService {
             self.exchange_api_base, 
             "/api/v1/user/account/transfer/token?fromAccountId=", current_ac_id,
             "&toAccountId=", trading_ac_id,
-            "&tokenId=1&quantity=", self.collateral_per_slot.to_string()
+            "&tokenId=1&quantity=", self.collateral_to_be_deposited.to_string()
         ))?;
         res = client.post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.exchange_jwt))
@@ -443,10 +451,10 @@ async fn main() -> Result<()> {
                 }
             };
 
-            let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-            if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 1) || collateral_per_slot.scale() > 1) {
-                error!("collateral_per_slot must be 0 or >= 0.1 ETH & no more than 1 decimal place");
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
+            let collateral_to_be_deposited: Decimal = Decimal::from_str(&config.extra.collateral_to_be_deposited)?;
+            if collateral_to_be_deposited < Decimal::new(1, 1) && collateral_to_be_deposited.scale() > 1 {
+                error!("collateral_to_be_deposited must be >= 0.1 ETH & no more than 1 decimal place");
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_to_be_deposited").into());
             }
 
             let exchange_service = EthgasExchangeService {
@@ -489,7 +497,8 @@ async fn main() -> Result<()> {
                 let commit_service = EthgasDepositService { 
                     exchange_api_base: exchange_service.exchange_api_base.clone(), 
                     rpc_url,
-                    collateral_per_slot,
+                    collateral_to_be_deposited,
+                    collateral_contract: config.extra.collateral_contract,
                     eoa_signing_key: exchange_service.eoa_signing_key.clone(),
                     exchange_jwt 
                 };
