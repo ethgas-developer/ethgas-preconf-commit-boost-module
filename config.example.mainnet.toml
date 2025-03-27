@@ -57,7 +57,7 @@ late_in_slot_time_ms = 2000
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
-# rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
+rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
