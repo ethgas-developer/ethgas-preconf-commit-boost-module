@@ -25,7 +25,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
-    * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or >= 0.1 and no more than 1 decimal place
+    * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
     * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * Set validator BLS key directory or file in `docker-compose.yml`
@@ -48,6 +48,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 
 ## Deposit ETH to our collateral contract
+* You can either deposit ETH via our [website](https://app.ethgas.com/my-portfolio/accounts) or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+* Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
 struct TokenTransfer {
@@ -57,7 +59,6 @@ struct TokenTransfer {
 function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 ```
 * For WETH, put `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
-* EthgasPool on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
 
 ## Debug cb_ethgas_commit locally
 * To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`, uncomment `tracing-subscriber = "0.2"` in `Cargo.toml` and comment/uncomment relevant code in `bin/ethgas_commit.rs` according to the example below
