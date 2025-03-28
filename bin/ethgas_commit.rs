@@ -14,6 +14,7 @@ use reqwest::{Client, Url};
 use tokio::time::sleep;
 use tokio_retry::{Retry, strategy::FixedInterval};
 use hex::encode;
+use rust_decimal::Decimal;
 // use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
@@ -53,6 +54,9 @@ struct ExtraConfig {
     wait_interval_in_second: u32,
     enable_pricer: bool,
     enable_registration: bool,
+    enable_builder: bool,
+    collateral_per_slot: String,
+    builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
     exchange_jwt: Option<String>,
@@ -168,12 +172,22 @@ struct APIEnablePricerResponse {
     success: bool
 }
 
+#[derive(Debug, Deserialize)]
+struct APIEnableBuilderResponse {
+    success: bool
+}
+
+#[derive(Debug, Deserialize)]
+struct APIValidatorSettingsResponse {
+    success: bool
+}
+
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<String> {
         let client = Client::new();
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-        
+        info!("your EOA address: {}", signer.clone().address());
         let mut exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login"))?;
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
@@ -214,7 +228,7 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
-        info!("successfully obtain JWT from the exchange");
+        info!("successfully obtained JWT from the exchange");
         Ok(res_json_verify.data.accessToken.token)
         // println!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
@@ -224,7 +238,6 @@ impl EthgasExchangeService {
 impl EthgasCommitService {
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let client = Client::new();
-        info!(chain = ?self.config.chain); // Debug: chain
 
         let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/pricer?enable=", self.config.extra.enable_pricer))?;
         let mut res = client.post(exchange_api_url.to_string())
@@ -237,22 +250,52 @@ impl EthgasCommitService {
                 match result.success {
                     true => {
                         if self.config.extra.enable_pricer == true {
-                            info!("successfully enable pricer");
+                            info!("successfully enabled pricer");
                         } else {
-                            info!("successfully disable pricer");
+                            info!("successfully disabled pricer");
                         }
                     },
                     false => {
                         if self.config.extra.enable_pricer == true {
-                            error!("fail to enable pricer");
+                            error!("failed to enable pricer");
                         } else {
-                            error!("fail to disable pricer");
+                            error!("failed to disable pricer");
                         }
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call pricer API");
+                error!(?err, "failed to call pricer API");
+            }
+        }
+
+        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKey=", self.config.extra.builder_pubkey))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APIEnableBuilderResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        if self.config.extra.enable_builder == true {
+                            info!("successfully delegated to builder {}", self.config.extra.builder_pubkey);
+                        } else {
+                            info!("successfully disabled builder delegation");
+                        }
+                    },
+                    false => {
+                        if self.config.extra.enable_builder == true {
+                            error!("failed to enable builder delegation");
+                        } else {
+                            error!("failed to disable builder delegation");
+                        }
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call builder delegation API");
             }
         }
 
@@ -317,7 +360,7 @@ impl EthgasCommitService {
                                                 info!("successful registration, you can now sell preconfs on ETHGas!");
                                             }
                                         } else {
-                                            error!("fail to register");
+                                            error!("failed to register");
                                         }
                                     },
                                     Err(e) => error!("Failed to parse validator verification response: {}", e)
@@ -327,7 +370,7 @@ impl EthgasCommitService {
                         }
                     },
                     Err(err) => {
-                        error!(?err, "fail to request for signing data");
+                        error!(?err, "failed to call validator register API");
                     }
                 }
             } else {
@@ -344,16 +387,39 @@ impl EthgasCommitService {
                         if res_json_request.success {
                             info!("successful de-registration!");
                         } else {
-                            info!("fail to de-register");
+                            error!("failed to de-register");
                         }
                     },
                     Err(err) => {
-                        error!(?err, "fail to request for signing data");
+                        error!(?err, "failed to call validator deregister API");
                     }
                 }
             }
             sleep(Duration::from_millis(500)).await;
         }
+
+        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APIValidatorSettingsResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
+                    },
+                    false => {
+                        error!("failed to set collateral per slot");
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call validator collateral setting API");
+            }
+        }
+
         Ok(())
     }
 }
@@ -382,6 +448,7 @@ async fn main() -> Result<()> {
                     module_id = %config.id,
                     "Starting module with custom data"
                 );
+                info!("chain: {:?}", config.chain);
 
                 let pbs_config = match load_pbs_config() {
                     Ok(config) => config,
@@ -391,21 +458,11 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                let mux_pubkeys = match pbs_config.muxes {
-                    Some(mux_map) => {
-                        let mut vec = Vec::new();
-                        for (key, value) in mux_map.iter() {
-                            for relay in value.relays.iter() {
-                                if relay.id.contains("ethgas") {
-                                    vec.push(BlsPublicKey::from(*key));
-                                    break;
-                                }
-                            }
-                        }
-                        vec
-                    },
-                    None => Vec::new()
-                };
+                let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
+                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
+                    error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
+                }
 
                 let exchange_jwt: String;
                 if config.extra.is_jwt_provided == false {
@@ -459,12 +516,31 @@ async fn main() -> Result<()> {
                         }
                     };
                 }
+
+                let mux_pubkeys = match pbs_config.muxes {
+                    Some(mux_map) => {
+                        let mut vec = Vec::new();
+                        for (key, value) in mux_map.iter() {
+                            for relay in value.relays.iter() {
+                                if relay.id.contains("ethgas") {
+                                    vec.push(BlsPublicKey::from(*key));
+                                    break;
+                                }
+                            }
+                        }
+                        vec
+                    },
+                    None => Vec::new()
+                };
+
                 if !exchange_jwt.is_empty() {
                     let commit_service = EthgasCommitService { config, exchange_jwt, mux_pubkeys };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }
-                } else { error!("JWT invalid") }
+                } else { 
+                    error!("JWT invalid") 
+                }
 
 
             }

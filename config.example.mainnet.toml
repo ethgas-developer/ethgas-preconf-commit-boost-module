@@ -65,7 +65,7 @@ extra_validation_enabled = false
 # OPTIONAL, DEFAULT: URL hostname
 id = "ethgas"
 # Relay URL in the format scheme://pubkey@host
-url = "https://0xa73311dc106c66a4eef8bcdf2d5083d2cd700612593cc2f1fdf1bd618f5f051a052992117866ebdf833240b1c8547340@relay.ethgas.com"
+url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@relay.ethgas.com"
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
@@ -186,13 +186,16 @@ secrets_path = "/path/to/data_validator/secrets"
 [[modules]]
 id = "ETHGAS_COMMIT"
 type = "commit"
+env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
-env_file = ".cb.env"
 wait_interval_in_second = 0
-enable_pricer = true
 enable_registration = true
+enable_pricer = true
+enable_builder = false
+collateral_per_slot = "1.0"
+builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
 # Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env as env variables

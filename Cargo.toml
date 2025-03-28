@@ -26,6 +26,7 @@ indexmap = "2.2.6"
 lazy_static = "1.5.0"
 prometheus = "0.13.4"
 tokio-retry = "0.3"
+rust_decimal = "1.37"
 # tracing-subscriber = "0.2"
 
 [[bin]]

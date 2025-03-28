@@ -3,6 +3,11 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
 * `cb_signer`: It securely generates signatures from the validator BLS private keys
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
+![Architecture](./architecture.png)
+
+## Build docker images
+* For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
+* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or run [this script](https://github.com/Commit-Boost/commit-boost-client/blob/main/scripts/build_local_images.sh) to build it locally
 
 ## Config Setup
 * Copy one of the `config.example.xxx.toml` as `config.toml`
@@ -19,6 +24,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
         * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
+    * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
+    * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
     * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * Set validator BLS key directory or file in `docker-compose.yml`
@@ -26,10 +33,6 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
     * if `keys_path` and `secrets_path` are set in `config.toml`, then set `CB_SIGNER_LOADER_KEYS_DIR: /keys` and `CB_SIGNER_LOADER_SECRETS_DIR: /secrets`
     * mount the correct validator keystore directories from the host machine to the container `/keys` and `/secrets` directory
-
-## Build docker images
-* For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
-* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or run [this script](https://github.com/Commit-Boost/commit-boost-client/blob/main/scripts/build_local_images.sh) to build it locally
 
 ## Start the Signer module
 * Run `docker-compose -f docker-compose.yml up cb_signer`
@@ -43,6 +46,19 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
+
+## Deposit ETH to our collateral contract
+* You can either deposit ETH via our [website](https://app.ethgas.com/my-portfolio/accounts) or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+* Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
+* Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
+```
+struct TokenTransfer {
+    address token;
+    uint256 amount;
+}
+function deposit(TokenTransfer[] memory tokenTransfers) external payable;
+```
+* For WETH, put `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
 
 ## Debug cb_ethgas_commit locally
 * To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`, uncomment `tracing-subscriber = "0.2"` in `Cargo.toml` and comment/uncomment relevant code in `bin/ethgas_commit.rs` according to the example below
