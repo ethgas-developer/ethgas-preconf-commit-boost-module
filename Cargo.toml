@@ -28,6 +28,7 @@ prometheus = "0.13.4"
 tokio-retry = "0.3"
 rust_decimal = "1.37"
 chrono = "0.4.40"
+cookie = "0.18"
 # tracing-subscriber = "0.2"
 
 [[bin]]

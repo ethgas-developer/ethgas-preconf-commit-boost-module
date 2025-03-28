@@ -47,7 +47,7 @@ struct EthgasDepositService {
     collateral_to_be_deposited: Decimal,
     collateral_contract: alloy::primitives::Address,
     eoa_signing_key: B256,
-    exchange_jwt: String
+    access_jwt: String
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -289,7 +289,7 @@ impl EthgasDepositService {
 
         let mut exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/p/funding/contractAddress"))?;
         let mut res = client.get(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .send()
                 .await?;
         let ethgas_pool_addr = match res.json::<APICollateralContractResponse>().await {
@@ -299,16 +299,15 @@ impl EthgasDepositService {
                         result.data.contractAddress
                     },
                     false => {
-                        error!("fail to get collateral contract address from exchange");
                         return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                            "fail to get collateral contract address from exchange").into());
+                            "failed to get collateral contract address from exchange").into());
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call contract address API");
+                error!(?err, "failed to call contract address API");
                 return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                    "fail to call contract address API").into());
+                    "failed to call contract address API").into());
             }
         };
         if ethgas_pool_addr == self.collateral_contract {
@@ -323,7 +322,7 @@ impl EthgasDepositService {
         sleep(Duration::from_secs(60)).await;
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/funding/deposits"))?;
         res = client.get(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .send()
                 .await?;
         match res.json::<APIDepositsHistoryResponse>().await {
@@ -340,19 +339,19 @@ impl EthgasDepositService {
                         }
                     },
                     false => {
-                        error!("fail to get deposits history");
+                        error!("failed to get deposits history");
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call deposits history API");
+                error!(?err, "failed to call deposits history API");
             }
         }
         let mut current_ac_id: u32 = 0;
         let mut trading_ac_id: u32 = 0;
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/accounts"))?;
         res = client.get(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .send()
                 .await?;
         match res.json::<APIAccountsResponse>().await {
@@ -371,12 +370,14 @@ impl EthgasDepositService {
                         }
                     },
                     false => {
-                        error!("fail to get user accounts");
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                            "failed to get user accounts").into());
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call user accounts API");
+                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "failed to call user accounts API").into());
             }
         }
 
@@ -388,7 +389,7 @@ impl EthgasDepositService {
             "&tokenId=1&quantity=", self.collateral_to_be_deposited.to_string()
         ))?;
         res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .send()
                 .await?;
         match res.json::<APIAccountTokenTransferResponse>().await {
@@ -398,12 +399,12 @@ impl EthgasDepositService {
                         info!("successfully transfer ETH from current account to trading account")
                     },
                     false => {
-                        error!("fail to transfer ETH from current account to trading account");
+                        error!("failed to transfer ETH from current account to trading account");
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call account token transfer API");
+                error!(?err, "failed to call account token transfer API");
             }
         }
         
@@ -480,7 +481,7 @@ async fn main() -> Result<()> {
                     }
                 }
             };
-            let exchange_jwt = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
+            let access_jwt = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
                 let service = EthgasExchangeService {
                     exchange_api_base: exchange_service.exchange_api_base.clone(),
                     chain_id: exchange_service.chain_id.clone(),
@@ -493,14 +494,14 @@ async fn main() -> Result<()> {
                 })
             }).await?;
 
-            if !exchange_jwt.is_empty() {
+            if !access_jwt.is_empty() {
                 let commit_service = EthgasDepositService { 
                     exchange_api_base: exchange_service.exchange_api_base.clone(), 
                     rpc_url,
                     collateral_to_be_deposited,
                     collateral_contract: config.extra.collateral_contract,
                     eoa_signing_key: exchange_service.eoa_signing_key.clone(),
-                    exchange_jwt 
+                    access_jwt 
                 };
                 if let Err(err) = commit_service.run().await {
                     error!(?err);
