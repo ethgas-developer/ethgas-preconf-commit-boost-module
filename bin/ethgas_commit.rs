@@ -187,7 +187,7 @@ impl EthgasExchangeService {
         let client = Client::new();
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-        
+        info!("your EOA address: {}", signer.clone().address());
         let mut exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login"))?;
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
@@ -228,7 +228,7 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
-        info!("successfully obtain JWT from the exchange");
+        info!("successfully obtained JWT from the exchange");
         Ok(res_json_verify.data.accessToken.token)
         // println!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
@@ -238,7 +238,6 @@ impl EthgasExchangeService {
 impl EthgasCommitService {
     pub async fn run(self) -> Result<(), Box<dyn Error>> {
         let client = Client::new();
-        info!(chain = ?self.config.chain); // Debug: chain
 
         let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/pricer?enable=", self.config.extra.enable_pricer))?;
         let mut res = client.post(exchange_api_url.to_string())
@@ -251,22 +250,22 @@ impl EthgasCommitService {
                 match result.success {
                     true => {
                         if self.config.extra.enable_pricer == true {
-                            info!("successfully enable pricer");
+                            info!("successfully enabled pricer");
                         } else {
-                            info!("successfully disable pricer");
+                            info!("successfully disabled pricer");
                         }
                     },
                     false => {
                         if self.config.extra.enable_pricer == true {
-                            error!("fail to enable pricer");
+                            error!("failed to enable pricer");
                         } else {
-                            error!("fail to disable pricer");
+                            error!("failed to disable pricer");
                         }
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call pricer API");
+                error!(?err, "failed to call pricer API");
             }
         }
 
@@ -281,44 +280,22 @@ impl EthgasCommitService {
                 match result.success {
                     true => {
                         if self.config.extra.enable_builder == true {
-                            info!("successfully delegate to builder {}", self.config.extra.builder_pubkey);
+                            info!("successfully delegated to builder {}", self.config.extra.builder_pubkey);
                         } else {
-                            info!("successfully disable builder delegation");
+                            info!("successfully disabled builder delegation");
                         }
                     },
                     false => {
                         if self.config.extra.enable_builder == true {
-                            error!("fail to enable builder delegation");
+                            error!("failed to enable builder delegation");
                         } else {
-                            error!("fail to disable builder delegation");
+                            error!("failed to disable builder delegation");
                         }
                     }
                 }
             },
             Err(err) => {
-                error!(?err, "fail to call builder delegation API");
-            }
-        }
-
-        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
-                .header("content-type", "application/json")
-                .send()
-                .await?;
-        match res.json::<APIValidatorSettingsResponse>().await {
-            Ok(result) => {
-                match result.success {
-                    true => {
-                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
-                    },
-                    false => {
-                        error!("fail to set collateral per slot");
-                    }
-                }
-            },
-            Err(err) => {
-                error!(?err, "fail to call validator collateral setting API");
+                error!(?err, "failed to call builder delegation API");
             }
         }
 
@@ -383,7 +360,7 @@ impl EthgasCommitService {
                                                 info!("successful registration, you can now sell preconfs on ETHGas!");
                                             }
                                         } else {
-                                            error!("fail to register");
+                                            error!("failed to register");
                                         }
                                     },
                                     Err(e) => error!("Failed to parse validator verification response: {}", e)
@@ -393,7 +370,7 @@ impl EthgasCommitService {
                         }
                     },
                     Err(err) => {
-                        error!(?err, "fail to request for signing data");
+                        error!(?err, "failed to call validator register API");
                     }
                 }
             } else {
@@ -410,16 +387,39 @@ impl EthgasCommitService {
                         if res_json_request.success {
                             info!("successful de-registration!");
                         } else {
-                            error!("fail to de-register");
+                            error!("failed to de-register");
                         }
                     },
                     Err(err) => {
-                        error!(?err, "fail to request for signing data");
+                        error!(?err, "failed to call validator deregister API");
                     }
                 }
             }
             sleep(Duration::from_millis(500)).await;
         }
+
+        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APIValidatorSettingsResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
+                    },
+                    false => {
+                        error!("failed to set collateral per slot");
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call validator collateral setting API");
+            }
+        }
+
         Ok(())
     }
 }
@@ -448,6 +448,7 @@ async fn main() -> Result<()> {
                     module_id = %config.id,
                     "Starting module with custom data"
                 );
+                info!("chain: {:?}", config.chain);
 
                 let pbs_config = match load_pbs_config() {
                     Ok(config) => config,
@@ -458,8 +459,8 @@ async fn main() -> Result<()> {
                 };
 
                 let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 1) || collateral_per_slot.scale() > 1) {
-                    error!("collateral_per_slot must be 0 or >= 0.1 ETH & no more than 1 decimal place");
+                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
+                    error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
                     return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
                 }
 
