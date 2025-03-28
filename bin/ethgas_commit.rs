@@ -495,7 +495,7 @@ async fn main() -> Result<()> {
                 };
 
                 let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
+                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot > Decimal::new(1000, 0) || collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
                     error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
                     return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
                 }

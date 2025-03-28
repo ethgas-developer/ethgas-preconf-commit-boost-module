@@ -37,7 +37,6 @@ lazy_static! {
 struct EthgasExchangeService {
     exchange_api_base: String,
     chain_id: Option<String>, // not required, only for backward compatibility 
-    entity_name: String,
     eoa_signing_key: B256,
 }
 
@@ -58,7 +57,6 @@ struct EthgasDepositService {
 struct ExtraConfig {
     exchange_api_base: String,
     chain_id: Option<String>, // not required, only for backward compatibility 
-    entity_name: String,
     collateral_to_be_deposited: String,
     collateral_contract: alloy::primitives::Address,
     eoa_signing_key: Option<B256>,
@@ -200,7 +198,6 @@ impl EthgasExchangeService {
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("chainId", self.chain_id.clone())])
-                .query(&[("name", self.entity_name.clone())])
                 .send()
                 .await?;
                 
@@ -453,15 +450,14 @@ async fn main() -> Result<()> {
             };
 
             let collateral_to_be_deposited: Decimal = Decimal::from_str(&config.extra.collateral_to_be_deposited)?;
-            if collateral_to_be_deposited < Decimal::new(1, 1) && collateral_to_be_deposited.scale() > 1 {
-                error!("collateral_to_be_deposited must be >= 0.1 ETH & no more than 1 decimal place");
-                return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_to_be_deposited").into());
-            }
+                if (collateral_to_be_deposited < Decimal::new(1, 2) || collateral_to_be_deposited.scale() > 2) {
+                    error!("collateral_to_be_deposited must be >= 0.01 & no more than 2 decimal place");
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_to_be_deposited").into());
+                }
 
             let exchange_service = EthgasExchangeService {
                 exchange_api_base: config.extra.exchange_api_base.clone(),
                 chain_id: config.extra.chain_id.clone(),
-                entity_name: config.extra.entity_name.clone(),
                 eoa_signing_key: match config.extra.eoa_signing_key.clone() {
                     Some(eoa) => eoa,
                     None => {
@@ -485,7 +481,6 @@ async fn main() -> Result<()> {
                 let service = EthgasExchangeService {
                     exchange_api_base: exchange_service.exchange_api_base.clone(),
                     chain_id: exchange_service.chain_id.clone(),
-                    entity_name: exchange_service.entity_name.clone(),
                     eoa_signing_key: exchange_service.eoa_signing_key.clone(),
                 };
                 service.login().await.map_err(|err| {
