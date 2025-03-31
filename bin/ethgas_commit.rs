@@ -15,6 +15,7 @@ use tokio::time::sleep;
 use tokio_retry::{Retry, strategy::FixedInterval};
 use hex::encode;
 use rust_decimal::Decimal;
+use cookie::Cookie;
 // use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
@@ -38,7 +39,8 @@ struct EthgasExchangeService {
 
 struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
-    exchange_jwt: String,
+    access_jwt: String,
+    refresh_jwt: String,
     mux_pubkeys: Vec<BlsPublicKey>
 }
 
@@ -59,7 +61,8 @@ struct ExtraConfig {
     builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
-    exchange_jwt: Option<String>,
+    access_jwt: Option<String>,
+    refresh_jwt: Option<String>
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -183,7 +186,7 @@ struct APIValidatorSettingsResponse {
 }
 
 impl EthgasExchangeService {
-    pub async fn login(self) -> Result<String> {
+    pub async fn login(self) -> Result<(String, String)> {
         let client = Client::new();
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
@@ -225,11 +228,21 @@ impl EthgasExchangeService {
                 .query(&[("signature", signature_hex)])
                 .send()
                 .await?;
+        let refresh_jwt: String;
+        if let Some(set_cookie) = res.headers().get("Set-Cookie") {
+            let cookie_str = set_cookie.to_str().expect("cannot parse cookie");
+            let cookie = Cookie::parse(cookie_str)?;
+            info!("successfully obtained refresh jwt from the exchange");
+            refresh_jwt = cookie.value().to_string();
+        } else {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                "Set-Cookie header not found").into());
+        }
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
-        info!("successfully obtained JWT from the exchange");
-        Ok(res_json_verify.data.accessToken.token)
+        info!("successfully obtained access jwt from the exchange");
+        Ok((res_json_verify.data.accessToken.token, refresh_jwt))
         // println!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
     }
@@ -241,7 +254,7 @@ impl EthgasCommitService {
 
         let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/pricer?enable=", self.config.extra.enable_pricer))?;
         let mut res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .header("content-type", "application/json")
                 .send()
                 .await?;
@@ -271,7 +284,7 @@ impl EthgasCommitService {
 
         exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKey=", self.config.extra.builder_pubkey))?;
         res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .header("content-type", "application/json")
                 .send()
                 .await?;
@@ -310,23 +323,46 @@ impl EthgasCommitService {
             client_pubkeys
         };
 
+        let mut access_jwt = self.access_jwt;
         for i in 0..pubkeys.len() {
             let pubkey = pubkeys[i];
             info!(pubkey_counter = i, ?pubkey);
-
+            if i % 10000 == 0 && i != 0 {
+                exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
+                res = client.post(exchange_api_url.to_string())
+                    .header("User-Agent", "cb_ethgas_commit")
+                    .header("Authorization", format!("Bearer {}", access_jwt))
+                    .header("content-type", "application/json")
+                    .query(&[("publicKey", pubkey.to_string())])
+                    .send()
+                    .await?;
+                match res.json::<APILoginVerifyResponse>().await {
+                    Ok(res_json) => {
+                        if res_json.success {
+                            info!("successfully refreshed access jwt!");
+                            access_jwt = res_json.data.accessToken.token;
+                        } else {
+                            error!("failed to refresh access jwt");
+                        }
+                    },
+                    Err(err) => {
+                        error!(?err, "failed to call jwt refresh API");
+                    }
+                }
+            }
             if !self.config.extra.enable_registration == false {
                 exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
                 res = client.post(exchange_api_url.to_string())
-                    .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                    .header("Authorization", format!("Bearer {}", access_jwt))
                     .header("content-type", "application/json")
                     .query(&[("publicKey", pubkey.to_string())])
                     .send()
                     .await?;
                 match res.json::<APIValidatorRegisterResponse>().await {
-                    Ok(res_json_request) => {
-                        info!(exchange_signing_data = ?res_json_request);
+                    Ok(res_json) => {
+                        info!(?res_json);
 
-                        match res_json_request.data.message {
+                        match res_json.data.message {
                             Some(api_validator_request_response_data_message) => {
                                 let info = RegisteredInfo {
                                     eoaAddress: api_validator_request_response_data_message.eoaAddress
@@ -341,7 +377,7 @@ impl EthgasCommitService {
                                     .await?;
 
                                 res = client.post(exchange_api_url.to_string())
-                                    .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                                    .header("Authorization", format!("Bearer {}", access_jwt))
                                     .header("content-type", "application/json")
                                     .query(&[("publicKey", pubkey.to_string())])
                                     .query(&[("signature", signature.to_string())])
@@ -376,15 +412,15 @@ impl EthgasCommitService {
             } else {
                 exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
                 res = client.post(exchange_api_url.to_string())
-                    .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                    .header("Authorization", format!("Bearer {}", access_jwt))
                     .header("content-type", "application/json")
                     .query(&[("publicKey", pubkey.to_string())])
                     .send()
                     .await?;
                 match res.json::<APIValidatorDeregisterResponse>().await {
-                    Ok(res_json_request) => {
-                        info!(exchange_signing_data = ?res_json_request);
-                        if res_json_request.success {
+                    Ok(res_json) => {
+                        info!(?res_json);
+                        if res_json.success {
                             info!("successful de-registration!");
                         } else {
                             error!("failed to de-register");
@@ -395,12 +431,12 @@ impl EthgasCommitService {
                     }
                 }
             }
-            sleep(Duration::from_millis(500)).await;
+            sleep(Duration::from_millis(250)).await;
         }
 
         exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
         res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.exchange_jwt))
+                .header("Authorization", format!("Bearer {}", access_jwt))
                 .header("content-type", "application/json")
                 .send()
                 .await?;
@@ -459,12 +495,13 @@ async fn main() -> Result<()> {
                 };
 
                 let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
+                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot > Decimal::new(1000, 0) || collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
                     error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
                     return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
                 }
 
-                let exchange_jwt: String;
+                let access_jwt: String;
+                let refresh_jwt: String;
                 if config.extra.is_jwt_provided == false {
                     let exchange_service = EthgasExchangeService {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
@@ -489,7 +526,7 @@ async fn main() -> Result<()> {
                             }
                         }
                     };
-                    exchange_jwt = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
+                    (access_jwt, refresh_jwt) = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
                         let service = EthgasExchangeService {
                             exchange_api_base: exchange_service.exchange_api_base.clone(),
                             chain_id: exchange_service.chain_id.clone(),
@@ -502,15 +539,28 @@ async fn main() -> Result<()> {
                         })
                     }).await?;
                 } else {
-                    exchange_jwt = match config.extra.exchange_jwt.clone() {
+                    access_jwt = match config.extra.access_jwt.clone() {
                         Some(jwt) => jwt,
                         None => {
-                            match env::var("EXCHANGE_JWT") {
+                            match env::var("ACCESS_JWT") {
                                 Ok(jwt) => jwt,
                                 Err(_) => {
-                                    error!("Config exchange_jwt is required. Please set EXCHANGE_JWT environment variable or provide it in the config file");
+                                    error!("Config access_jwt is required. Please set ACCESS_JWT environment variable or provide it in the config file");
                                     return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                    "exchange_jwt missing").into());
+                                    "access_jwt missing").into());
+                                }
+                            }
+                        }
+                    };
+                    refresh_jwt = match config.extra.refresh_jwt.clone() {
+                        Some(jwt) => jwt,
+                        None => {
+                            match env::var("REFRESH_JWT") {
+                                Ok(jwt) => jwt,
+                                Err(_) => {
+                                    error!("Config refresh_jwt is required. Please set REFRESH_JWT environment variable or provide it in the config file");
+                                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                    "refresh_jwt missing").into());
                                 }
                             }
                         }
@@ -533,13 +583,14 @@ async fn main() -> Result<()> {
                     None => Vec::new()
                 };
 
-                if !exchange_jwt.is_empty() {
-                    let commit_service = EthgasCommitService { config, exchange_jwt, mux_pubkeys };
+                if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
+                    let commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }
                 } else { 
-                    error!("JWT invalid") 
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                        "access_jwt or refresh_jwt missing").into());
                 }
 
 

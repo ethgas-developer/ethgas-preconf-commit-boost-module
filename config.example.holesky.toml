@@ -57,7 +57,7 @@ late_in_slot_time_ms = 2000
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
-# rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
+rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
@@ -197,10 +197,24 @@ enable_builder = false
 collateral_per_slot = "1.0"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
-# Specify either eoa_signing_key or exchange_jwt depending on is_jwt_provided boolean value
-# Alternatively, you can set EOA_SIGNING_KEY or EXCHANGE_JWT in .cb.env as env variables
+# Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
+# Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
-exchange_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+
+
+# required only if cb_ethgas_deposit is run
+[[modules]]
+id = "ETHGAS_DEPOSIT"
+type = "commit"
+env_file = ".cb.env"
+docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
+block_confirmation = 12
+exchange_api_base = "https://holesky.app.ethgas.com"
+collateral_to_be_deposited = "4.0"
+collateral_contract = "0xDF242123D6819E5b4c12CDBCA183bb256C97FEFA"
+eoa_signing_key = "0x..."
 
 
 # Configuration for how metrics should be collected and scraped

@@ -21,8 +21,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set your `entity_name`
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
-    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to [our API doc](https://developers.ethgas.com/?python#post-api-user-login) to get jwt and set `is_jwt_provided = true` and `exchange_jwt` in `config.toml` 
-        * Alternatively, you can set `EOA_SIGNING_KEY` or `EXCHANGE_JWT` as env variables in `.cb.env`
+    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to our API doc [this part](https://developers.ethgas.com/?http#post-api-v1-user-login) and [this part](https://developers.ethgas.com/?http#post-api-v1-user-login-refresh) to get access & refresh jwt and set `is_jwt_provided = true` and `access_jwt` & `refresh_jwt` in `config.toml` 
+        * Alternatively, you can set `EOA_SIGNING_KEY` or `ACCESS_JWT` & `REFRESH_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate the default pricer to help you to sell preconfs
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
@@ -48,7 +48,12 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 
 ## Deposit ETH to our collateral contract
-* You can either deposit ETH via our [website](https://app.ethgas.com/my-portfolio/accounts) or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+* You can either deposit ETH/WETH via our [website](https://app.ethgas.com/my-portfolio/accounts), docker or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+
+### Through docker
+* Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
+
+### Through direct contract interaction
 * Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
