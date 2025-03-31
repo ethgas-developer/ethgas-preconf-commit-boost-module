@@ -210,6 +210,7 @@ id = "ETHGAS_DEPOSIT"
 type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
+block_confirmation = 12
 exchange_api_base = "https://app.ethgas.com"
 collateral_to_be_deposited = "4.0"
 collateral_contract = "0x818EF032D736B1a2ECC8556Fc1bC65aEBD8482c5"

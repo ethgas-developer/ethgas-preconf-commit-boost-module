@@ -41,6 +41,7 @@ struct EthgasExchangeService {
 
 struct EthgasDepositService {
     exchange_api_base: String,
+    block_confirmation: u64,
     rpc_url: Url,
     collateral_to_be_deposited: Decimal,
     collateral_contract: alloy::primitives::Address,
@@ -55,6 +56,7 @@ struct EthgasDepositService {
 #[derive(Debug, Deserialize)]
 struct ExtraConfig {
     exchange_api_base: String,
+    block_confirmation: u64,
     collateral_to_be_deposited: String,
     collateral_contract: alloy::primitives::Address,
     eoa_signing_key: Option<B256>,
@@ -312,8 +314,9 @@ impl EthgasDepositService {
                     "collateral contract address from exchange and the config are different").into());
         }
         self.deposit(self.collateral_to_be_deposited, ethgas_pool_addr).await?;
-        info!("waiting for 1 minute to confirm the deposit in the exchange...");
-        sleep(Duration::from_secs(60)).await;
+        let waiting_time = self.block_confirmation * 12;
+        info!("waiting for {} seconds to confirm the deposit in the exchange...", waiting_time);
+        sleep(Duration::from_secs(waiting_time)).await;
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/funding/deposits"))?;
         res = client.get(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.access_jwt))
@@ -486,7 +489,8 @@ async fn main() -> Result<()> {
 
             if !access_jwt.is_empty() {
                 let commit_service = EthgasDepositService { 
-                    exchange_api_base: exchange_service.exchange_api_base.clone(), 
+                    exchange_api_base: exchange_service.exchange_api_base.clone(),
+                    block_confirmation: config.extra.block_confirmation,
                     rpc_url,
                     collateral_to_be_deposited,
                     collateral_contract: config.extra.collateral_contract,

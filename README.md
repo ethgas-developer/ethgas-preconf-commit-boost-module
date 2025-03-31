@@ -48,7 +48,12 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 
 ## Deposit ETH to our collateral contract
-* You can either deposit ETH via our [website](https://app.ethgas.com/my-portfolio/accounts) or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+* You can either deposit ETH/WETH via our [website](https://app.ethgas.com/my-portfolio/accounts), docker or direct contract interaction. After deposit, please transfer ETH from current account to trading account
+
+### Through docker
+* Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
+
+### Through direct contract interaction
 * Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
