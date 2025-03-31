@@ -57,7 +57,7 @@ late_in_slot_time_ms = 2000
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
-rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
+rpc_url = "https://ethereum-rpc.publicnode.com"
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
@@ -212,7 +212,7 @@ env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
 exchange_api_base = "https://app.ethgas.com"
-collateral_to_be_deposited = "4.0"
+collateral_to_be_deposited = "1.0"
 collateral_contract = "0x818EF032D736B1a2ECC8556Fc1bC65aEBD8482c5"
 eoa_signing_key = "0x..."
 

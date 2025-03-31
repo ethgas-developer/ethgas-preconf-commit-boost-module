@@ -212,7 +212,7 @@ env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
 exchange_api_base = "https://holesky.app.ethgas.com"
-collateral_to_be_deposited = "4.0"
+collateral_to_be_deposited = "1.0"
 collateral_contract = "0xDF242123D6819E5b4c12CDBCA183bb256C97FEFA"
 eoa_signing_key = "0x..."
 

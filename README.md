@@ -17,7 +17,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
 * For remote signer module, Commit Boost supports Web3Signer. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
 * Set ETHGas Commit module config in `config.toml`
-    * under `[[modules]]` section,
+    * under `[[modules]]` section where `id = ETHGAS_COMMIT`,
     * set your `entity_name`
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
@@ -51,7 +51,11 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * You can either deposit ETH/WETH via our [website](https://app.ethgas.com/my-portfolio/accounts), docker or direct contract interaction. After deposit, please transfer ETH from current account to trading account
 
 ### Through docker
-* Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
+* Set ETHGas Deposit module config in `config.toml`
+    * under `[[modules]]` section where `id = ETHGAS_DEPOSIT`,
+    * set `collateral_to_be_deposited` to be >= `collateral_per_slot` of ETHGas Commit module
+    * set `eoa_signing_key` which should equal to the one in ETHGas Commit module above
+    * Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
 
 ### Through direct contract interaction
 * Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
