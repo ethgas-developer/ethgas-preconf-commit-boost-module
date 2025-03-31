@@ -129,7 +129,7 @@ validator_registration_batch_size = ""
 # The fields specified here are the same as in [[relays]] (headers, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
 # [[mux.relays]]
 # id = "ethgas"
-# url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com"
+# url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@relay.ethgas.com"
 
 # Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`
 # Currently two types of Signer modules are supported (only one can be used at a time):
@@ -188,7 +188,7 @@ id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
-exchange_api_base = "https://app.ethgas.com"
+exchange_api_base = "https://mainnet.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 wait_interval_in_second = 0
 enable_registration = true
@@ -211,7 +211,7 @@ type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
-exchange_api_base = "https://app.ethgas.com"
+exchange_api_base = "https://mainnet.app.ethgas.com"
 collateral_to_be_deposited = "1.0"
 collateral_contract = "0x818EF032D736B1a2ECC8556Fc1bC65aEBD8482c5"
 eoa_signing_key = "0x..."
