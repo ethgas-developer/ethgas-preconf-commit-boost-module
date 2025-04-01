@@ -5,5 +5,6 @@ keys.json
 mux_keys.json
 config.toml
 config.holesky.toml
+config.mainnet.toml
 docker-compose.yml
 .DS_Store
