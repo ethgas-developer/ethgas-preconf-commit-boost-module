@@ -194,8 +194,8 @@ wait_interval_in_second = 0
 enable_registration = true
 enable_pricer = true
 enable_builder = false
-collateral_per_slot = "1.0"
-builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+collateral_per_slot = "0.01"
+builder_pubkey = "0x..."
 is_jwt_provided = false
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
@@ -212,7 +212,7 @@ env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
 exchange_api_base = "https://mainnet.app.ethgas.com"
-collateral_to_be_deposited = "1.0"
+collateral_to_be_deposited = "0.01"
 collateral_contract = "0x818EF032D736B1a2ECC8556Fc1bC65aEBD8482c5"
 eoa_signing_key = "0x..."
 
