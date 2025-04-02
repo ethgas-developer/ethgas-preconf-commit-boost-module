@@ -450,7 +450,7 @@ async fn main() -> Result<()> {
             };
 
             let collateral_to_be_deposited: Decimal = Decimal::from_str(&config.extra.collateral_to_be_deposited)?;
-                if (collateral_to_be_deposited < Decimal::new(1, 2) || collateral_to_be_deposited.scale() > 2) {
+                if collateral_to_be_deposited < Decimal::new(1, 2) || collateral_to_be_deposited.scale() > 2 {
                     error!("collateral_to_be_deposited must be >= 0.01 & no more than 2 decimal place");
                     return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_to_be_deposited").into());
                 }
