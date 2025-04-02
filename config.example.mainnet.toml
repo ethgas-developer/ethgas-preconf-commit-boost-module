@@ -267,37 +267,37 @@ eoa_signing_key = "0x..."
 # start_port = 10000
 # prometheus_config = "./provisioning/prometheus.yml" # only in commit-boost v0.4.0
 
-# # Configuration stdout logs
-# # OPTIONAL, DEFAULT: enabled
-# [logs.stdout]
-# # Whether to enable stdout logging
-# # OPTIONAL, DEFAULT: true
-# enabled = true
-# # Log level. Supported values: trace, debug, info, warn, error
-# # OPTIONAL, DEFAULT: info
-# level = "info"
-# # Log in JSON format
-# # OPTIONAL, DEFAULT: false
-# use_json = false
-# # Whether to enable ANSI color codes
-# # OPTIONAL, DEFAULT: true
-# color = true
+# Configuration stdout logs
+# OPTIONAL, DEFAULT: enabled
+[logs.stdout]
+# Whether to enable stdout logging
+# OPTIONAL, DEFAULT: true
+enabled = true
+# Log level. Supported values: trace, debug, info, warn, error
+# OPTIONAL, DEFAULT: info
+level = "info"
+# Log in JSON format
+# OPTIONAL, DEFAULT: false
+use_json = false
+# Whether to enable ANSI color codes
+# OPTIONAL, DEFAULT: true
+color = true
 
-# # Configuration file logs
-# # OPTIONAL, DEFAULT: disabled
-# [logs.file]
-# # Whether to enable file logging
-# # OPTIONAL, DEFAULT: false
-# enabled = true
-# # Log level. Supported values: trace, debug, info, warn, error
-# # OPTIONAL, DEFAULT: info
-# level = "debug"
-# # Log in JSON format
-# # OPTIONAL, DEFAULT: true
-# use_json = true
-# # Path to the log directory
-# # OPTIONAL, DEFAULT: /var/logs/commit-boost
-# dir_path = "./logs"
-# # Maximum number of log files to keep
-# # OPTIONAL
-# max_files = 30
+# Configuration file logs
+# OPTIONAL, DEFAULT: disabled
+[logs.file]
+# Whether to enable file logging
+# OPTIONAL, DEFAULT: false
+enabled = true
+# Log level. Supported values: trace, debug, info, warn, error
+# OPTIONAL, DEFAULT: info
+level = "debug"
+# Log in JSON format
+# OPTIONAL, DEFAULT: true
+use_json = true
+# Path to the log directory
+# OPTIONAL, DEFAULT: /var/logs/commit-boost
+dir_path = "/var/logs/commit-boost"
+# Maximum number of log files to keep
+# OPTIONAL
+max_files = 30
