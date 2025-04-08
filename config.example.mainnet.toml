@@ -62,6 +62,7 @@ rpc_url = "https://ethereum-rpc.publicnode.com"
 # OPTIONAL, DEFAULT: URL hostname
 id = "ethgas"
 # Relay URL in the format scheme://pubkey@host
+# Please DO NOT change the url to use any other relay, otherwise you will get slashed
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@relay.ethgas.com"
 # Headers to send with each request for this relay
 # OPTIONAL
