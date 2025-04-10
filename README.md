@@ -7,7 +7,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
-* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or run [this script](https://github.com/Commit-Boost/commit-boost-client/blob/main/scripts/build_local_images.sh) to build it locally
+* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
 
 ## Config Setup
 * Copy one of the `config.example.xxx.toml` as `config.toml`
@@ -16,7 +16,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Do not use any other relay than the one listed in the `config.example.xxx.toml`, otherwise you will get slashed
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
-* For remote signer module, Commit Boost supports Web3Signer. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
+* For remote signer module, Commit Boost supports Web3Signer and Dirk. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section where `id = ETHGAS_COMMIT`,
     * set your `entity_name`
