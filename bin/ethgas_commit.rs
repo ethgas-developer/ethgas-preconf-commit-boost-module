@@ -1,6 +1,6 @@
 use commit_boost::prelude::*;
 use alloy::{
-    primitives::B256, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}
+    primitives::B256, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -13,10 +13,8 @@ use std::{
 use reqwest::{Client, Url};
 use tokio::time::sleep;
 use tokio_retry::{Retry, strategy::FixedInterval};
-use hex::encode;
 use rust_decimal::Decimal;
 use cookie::Cookie;
-// use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
 // You can define custom metrics and a custom registry for the business logic of
@@ -466,18 +464,20 @@ async fn main() -> Result<()> {
 
     // Remember to register all your metrics before starting the process
     MY_CUSTOM_REGISTRY.register(Box::new(SIG_RECEIVED_COUNTER.clone()))?;
-    // Spin up a server that exposes the /metrics endpoint to Prometheus
-    MetricsProvider::load_and_run(MY_CUSTOM_REGISTRY.clone())?;
 
-    let _guard = initialize_tracing_log("ETHGAS_COMMIT")?;
-    // let subscriber = FmtSubscriber::builder().finish();
-    // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    let _guard = initialize_tracing_log("ETHGAS_COMMIT", LogsSettings::from_env_config()?);
 
     let mut wait_interval_in_second: u32 = 0;
+    let mut counter: u32 = 0;
 
     loop {
         match load_commit_module_config::<ExtraConfig>() {
             Ok(config) => {
+                if counter == 0 {
+                    // Spin up a server that exposes the /metrics endpoint to Prometheus
+                    MetricsProvider::load_and_run(config.chain, MY_CUSTOM_REGISTRY.clone())?;
+                }
+
                 wait_interval_in_second = config.extra.wait_interval_in_second;
 
                 info!(
@@ -486,7 +486,7 @@ async fn main() -> Result<()> {
                 );
                 info!("chain: {:?}", config.chain);
 
-                let pbs_config = match load_pbs_config() {
+                let pbs_config = match load_pbs_config().await {
                     Ok(config) => config,
                     Err(err) => {
                         error!("Failed to load pbs config: {err:?}");
@@ -605,6 +605,7 @@ async fn main() -> Result<()> {
         }
         info!("waiting for {} seconds to start again...", wait_interval_in_second);
         sleep(Duration::from_millis((wait_interval_in_second as u64) * 1000)).await;
+        counter += 1;
     }
     Ok(())
 }

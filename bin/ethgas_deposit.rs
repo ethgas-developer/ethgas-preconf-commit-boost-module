@@ -5,6 +5,7 @@ use alloy::{
     network::EthereumWallet,
     contract::{Interface, ContractInstance},
     dyn_abi::DynSolValue,
+    hex::encode
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -17,10 +18,8 @@ use std::{
 use reqwest::{Client, Url};
 use tokio::time::{timeout, sleep};
 use tokio_retry::{Retry, strategy::FixedInterval};
-use hex::encode;
 use rust_decimal::Decimal;
 use chrono::DateTime;
-// use tracing_subscriber::FmtSubscriber;
 // use serde_json::Value;
 
 // You can define custom metrics and a custom registry for the business logic of
@@ -232,7 +231,7 @@ impl EthgasExchangeService {
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
-        info!("successfully obtain JWT from the exchange");
+        info!("successfully obtained access jwt from the exchange");
         Ok(res_json_verify.data.accessToken.token)
         // info!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
@@ -243,7 +242,7 @@ impl EthgasDepositService {
     pub async fn deposit(&self, amount: Decimal, ethgas_pool_addr: alloy::primitives::Address) -> Result<(), Box<dyn Error>> {
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key).map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
         let wallet = EthereumWallet::from(signer);
-        let provider = ProviderBuilder::new().with_recommended_fillers().wallet(wallet).on_http(self.rpc_url.clone());
+        let provider = ProviderBuilder::new().wallet(wallet).on_http(self.rpc_url.clone());
         const ABI: &str = r#"[{
             "inputs": [{
                 "components": [
@@ -393,7 +392,7 @@ impl EthgasDepositService {
             Ok(result) => {
                 match result.success {
                     true => {
-                        info!("successfully transfer ETH from current account to trading account")
+                        info!("successfully transferred ETH from current account to trading account")
                     },
                     false => {
                         error!("failed to transfer ETH from current account to trading account");
@@ -415,15 +414,13 @@ async fn main() -> Result<()> {
 
     // Remember to register all your metrics before starting the process
     MY_CUSTOM_REGISTRY.register(Box::new(SIG_RECEIVED_COUNTER.clone()))?;
-    // Spin up a server that exposes the /metrics endpoint to Prometheus
-    MetricsProvider::load_and_run(MY_CUSTOM_REGISTRY.clone())?;
 
-    let _guard = initialize_tracing_log("ETHGAS_DEPOSIT")?;
-    // let subscriber = FmtSubscriber::builder().finish();
-    // tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
+    let _guard = initialize_tracing_log("ETHGAS_DEPOSIT", LogsSettings::from_env_config()?);
 
     match load_commit_module_config::<ExtraConfig>() {
         Ok(config) => {
+            // Spin up a server that exposes the /metrics endpoint to Prometheus
+            MetricsProvider::load_and_run(config.chain, MY_CUSTOM_REGISTRY.clone())?;
 
             info!(
                 module_id = %config.id,
@@ -431,7 +428,7 @@ async fn main() -> Result<()> {
             );
             info!("chain: {:?}", config.chain);
 
-            let pbs_config = match load_pbs_config() {
+            let pbs_config = match load_pbs_config().await {
                 Ok(config) => config,
                 Err(err) => {
                     error!("Failed to load pbs config: {err:?}");
