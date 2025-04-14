@@ -1,10 +1,10 @@
-use rand::{distributions::Alphanumeric, Rng};
+use rand::{distr::Alphanumeric, Rng};
 use std::env;
 use indexmap::IndexMap;
 
 /// Generates a random string
 pub fn random_jwt() -> String {
-    rand::thread_rng().sample_iter(&Alphanumeric).take(32).map(char::from).collect()
+    rand::rng().sample_iter(&Alphanumeric).take(32).map(char::from).collect()
 }
 
 fn format_comma_separated(map: &IndexMap<String, String>) -> String {

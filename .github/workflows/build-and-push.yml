@@ -1,0 +1,35 @@
+name: Build and Push ethgas_commit and related images
+
+on:
+  push:
+    tags:
+      - "v*"
+    paths:
+      - bin/ethgas_commit.rs
+      - bin/ethgas_deposit.rs
+      - bin/gen_jwt.rs
+
+jobs:
+  build-ethgas-commit:
+    uses: ./.github/workflows/base.yml
+    with:
+      image_name: commitboost_ethgas_commit
+      dockerfile: Dockerfile.ethgas_commit
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
+  build-ethgas-deposit:
+    uses: ./.github/workflows/base.yml
+    with:
+      image_name: commitboost_ethgas_deposit
+      dockerfile: Dockerfile.ethgas_deposit
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
+
+  build-gen-jwt:
+    uses: ./.github/workflows/base.yml
+    with:
+      image_name: commitboost_gen_jwt
+      dockerfile: Dockerfile.gen_jwt
+    secrets:
+      GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}

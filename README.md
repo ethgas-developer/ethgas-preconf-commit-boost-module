@@ -71,14 +71,7 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 * For WETH, put `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
 
 ## Debug cb_ethgas_commit locally
-* To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`, uncomment `tracing-subscriber = "0.2"` in `Cargo.toml` and comment/uncomment relevant code in `bin/ethgas_commit.rs` according to the example below
-```
-use tracing_subscriber::FmtSubscriber;
-...
-// let _guard = initialize_tracing_log(&config.id)?;
-let subscriber = FmtSubscriber::builder().finish();
-tracing::subscriber::set_global_default(subscriber).expect("setting default subscriber failed");
-```
+* To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
 * Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
 

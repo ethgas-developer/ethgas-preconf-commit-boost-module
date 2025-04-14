@@ -1,35 +1,54 @@
 [package]
 name = "ethgas_commit_boost_modules"
-version = "0.1.0"
+version = "1.0.0-beta.2"
+rust-version = "1.83"
 edition = "2021"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "2fe6340e4761ac68a8144cfebad78a12f4970a17" }
-alloy = { version = "0.5.3", features = ["full"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-tree_hash = "0.8"
-tree_hash_derive = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
-ethereum-types = "0.14.1"
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "6b6b10f6cd9dde3eb361bbe146016ab6b42b276f" } # v0.7.0
+
+# ethereum
+alloy = { version = "0.12", features = [
+    "full",
+    "rpc-types-beacon",
+    "serde",
+    "ssz",
+    "getrandom",
+    "providers",
+] }
+
+# networking
+axum = { version = "0.8.1", features = ["macros"] }
+reqwest = { version = "0.12.4", features = ["json", "stream"] }
+
+# async / threads
+tokio = { version = "1.37.0", features = ["full"] }
+tokio-retry = "0.3"
+
+# serialization
+serde = { version = "1.0.202", features = ["derive"] }
+serde_json = "1.0.117"
+ethereum_ssz_derive = "0.8"
+
+# telemetry
+tracing = "0.1.40"
+tracing-subscriber = { version = "0.3.18", features = ["env-filter", "json"] }
+prometheus = "0.13.4"
+
+# crypto
 blst = "0.3.11"
-hex = "0.4"
-axum = "0.7.5"
+tree_hash = "0.9"
+tree_hash_derive = "0.9"
+
+# misc
 color-eyre = "0.6.3"
 eyre = "0.6.12"
-ethereum_ssz_derive = "0.5.3"
-alloy-primitives = "0.8.3"
-tracing = "0.1.40"
-reqwest = { version = "0.12.4", features = ["json"] }
-rand = "0.8.5"
+rand = { version = "0.9", features = ["os_rng"] }
 indexmap = "2.2.6"
 lazy_static = "1.5.0"
-prometheus = "0.13.4"
-tokio-retry = "0.3"
 rust_decimal = "1.37"
 chrono = "0.4.40"
 cookie = "0.18"
-# tracing-subscriber = "0.2"
 
 [[bin]]
 name = "gen_jwt"
