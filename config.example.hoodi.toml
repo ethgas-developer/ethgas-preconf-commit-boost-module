@@ -5,7 +5,7 @@
 # A network ID. Supported values: Mainnet, Holesky, Sepolia, Helder, Hoodi.
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
-chain = "Holesky" # this affect BUILDER_DOMAIN used in signing data root hash
+chain = "Hoodi" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module
 [pbs]
@@ -54,7 +54,7 @@ late_in_slot_time_ms = 2000
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
-rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
+rpc_url = "https://ethereum-hoodi-rpc.publicnode.com"
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
@@ -63,7 +63,7 @@ rpc_url = "https://ethereum-holesky-rpc.publicnode.com"
 id = "ethgas"
 # Relay URL in the format scheme://pubkey@host
 # Please DO NOT change the url to use any other relay, otherwise you will get slashed
-url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com"
+url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
@@ -134,7 +134,7 @@ validator_registration_batch_size = ""
 # The fields specified here are the same as in [[relays]] (headers, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
 # [[mux.relays]]
 # id = "ethgas"
-# url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@testnet-relay.ethgas.com"
+# url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
 
 # Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`
 # Currently three types of Signer modules are supported (only one can be used at a time):
@@ -225,13 +225,13 @@ id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
-exchange_api_base = "https://holesky.app.ethgas.com"
+exchange_api_base = "https://hoodi.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 wait_interval_in_second = 0
 enable_registration = true
 enable_pricer = true
 enable_builder = false
-collateral_per_slot = "1.0"
+collateral_per_slot = "0.01"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
@@ -248,9 +248,9 @@ type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
-exchange_api_base = "https://holesky.app.ethgas.com"
-collateral_to_be_deposited = "1.0"
-collateral_contract = "0xDF242123D6819E5b4c12CDBCA183bb256C97FEFA"
+exchange_api_base = "https://hoodi.app.ethgas.com"
+collateral_to_be_deposited = "0.01"
+collateral_contract = "0x1C88320862cfb177598395D8adae4bBf8d75F155"
 eoa_signing_key = "0x..."
 
 
