@@ -61,6 +61,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ### Through direct contract interaction
 * Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
     * on hoodi: [0x1C88320862cfb177598395D8adae4bBf8d75F155](https://hoodi.etherscan.io/address/0x1C88320862cfb177598395D8adae4bBf8d75F155#writeContract)
+    * on sepolia: [0xF0Fb730aAEc5a3deA628E22Ac888304919504740](https://sepolia.etherscan.io/address/0xF0Fb730aAEc5a3deA628E22Ac888304919504740#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
 struct TokenTransfer {
@@ -69,7 +70,7 @@ struct TokenTransfer {
 }
 function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 ```
-* For WETH, put `0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2` in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
+* For WETH, put the WETH address of the respective network in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
 
 ## Debug cb_ethgas_commit locally
 * To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
