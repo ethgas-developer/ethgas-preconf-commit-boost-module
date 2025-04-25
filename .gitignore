@@ -8,5 +8,6 @@ config.holesky.toml
 config.mainnet.toml
 config.testchain.toml
 config.hoodi.toml
+config.sepolia.toml
 docker-compose.yml
 .DS_Store
