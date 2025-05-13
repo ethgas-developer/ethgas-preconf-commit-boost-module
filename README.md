@@ -59,8 +59,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
 
 ### Through direct contract interaction
-* Collateral contract (EthgasPool) on mainnet: [0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5](https://etherscan.io/address/0x818ef032d736b1a2ecc8556fc1bc65aebd8482c5#writeContract)
-    * on hoodi: [0x1C88320862cfb177598395D8adae4bBf8d75F155](https://hoodi.etherscan.io/address/0x1C88320862cfb177598395D8adae4bBf8d75F155#writeContract)
+* Collateral contract (EthgasPool) on mainnet: [0x41c95AB9DBAC21B3992963Adf0e90F6478364b88](https://etherscan.io/address/0x41c95AB9DBAC21B3992963Adf0e90F6478364b88#writeContract)
+    * on hoodi: [0xe8bfB84b14c383b94365a895fc8bfA36dE236dc8](https://hoodi.etherscan.io/address/0xe8bfB84b14c383b94365a895fc8bfA36dE236dc8#writeContract)
     * on sepolia: [0xF0Fb730aAEc5a3deA628E22Ac888304919504740](https://sepolia.etherscan.io/address/0xF0Fb730aAEc5a3deA628E22Ac888304919504740#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
