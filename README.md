@@ -14,12 +14,14 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Do not use any other relay than the one listed in the `config.example.xxx.toml`, otherwise you will get slashed
+* Registration of SSV validators can skip signer-related setup below
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
 * For remote signer module, Commit Boost supports Web3Signer and Dirk. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section where `id = ETHGAS_COMMIT`,
     * set your `entity_name`
+    * set `registration_mode` to be either `standard` for the most typical validators, `ssv` for SSV validators or `skipped` to skip registration
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * By default, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. If `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to our API doc [this part](https://developers.ethgas.com/?http#post-api-v1-user-login) and [this part](https://developers.ethgas.com/?http#post-api-v1-user-login-refresh) to get access & refresh jwt and set `is_jwt_provided = true` and `access_jwt` & `refresh_jwt` in `config.toml` 
@@ -29,14 +31,14 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
     * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
-* Set validator BLS key directory or file in `docker-compose.yml`
+* For non-SSV validators, set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
     * if `key_path` is set in `config.toml`, then set `CB_SIGNER_LOADER_FILE: /keys.json`
     * if `keys_path` and `secrets_path` are set in `config.toml`, then set `CB_SIGNER_LOADER_KEYS_DIR: /keys` and `CB_SIGNER_LOADER_SECRETS_DIR: /secrets`
     * mount the correct validator keystore directories from the host machine to the container `/keys` and `/secrets` directory
 
 ## Start the Signer module
-* Run `docker-compose -f docker-compose.yml up cb_signer`
+* For registration of non-SSV validators, run `docker-compose -f docker-compose.yml up cb_signer`
 
 ## Start the ETHGas Commit module
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange

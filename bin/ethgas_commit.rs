@@ -53,6 +53,7 @@ struct ExtraConfig {
     entity_name: String,
     wait_interval_in_second: u32,
     enable_pricer: bool,
+    registration_mode: String,
     enable_registration: bool,
     enable_builder: bool,
     collateral_per_slot: String,
@@ -166,6 +167,48 @@ struct APIValidatorVerifyResponse {
 struct APIValidatorVerifyResponseData {
     result: usize,
     description: String
+}
+
+#[derive(Debug)]
+enum APISsvValidatorResponse {
+    Register(APISsvValidatorRegisterResponse),
+    RegisterAll(APISsvValidatorRegisterAllResponse),
+    DeregisterAll(APISsvValidatorDeregisterAllResponse),
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorRegisterResponse  {
+    success: bool,
+    data: APISsvValidatorRegisterResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorRegisterResponseData {
+    ssv: bool,
+    added: Vec<BlsPublicKey>
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorRegisterAllResponse  {
+    success: bool,
+    data: APISsvValidatorRegisterAllResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorRegisterAllResponseData {
+    ssv: bool,
+    size: u32
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorDeregisterAllResponse  {
+    success: bool,
+    data: APISsvValidatorDeregisterAllResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvValidatorDeregisterAllResponseData {
+    removed: u32
 }
 
 #[derive(Debug, Deserialize)]
@@ -310,126 +353,228 @@ impl EthgasCommitService {
             }
         }
 
-        let pubkeys = if !self.mux_pubkeys.is_empty() {
-            self.mux_pubkeys
-        } else {
-            let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
-            let mut client_pubkeys = Vec::new();
-            for proxy_map in client_pubkeys_response.keys {
-                client_pubkeys.push(proxy_map.consensus);
-            }
-            client_pubkeys
-        };
-
         let mut access_jwt = self.access_jwt;
-        for i in 0..pubkeys.len() {
-            let pubkey = pubkeys[i];
-            info!(pubkey_counter = i, ?pubkey);
-            if i % 10000 == 0 && i != 0 {
-                exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
-                res = client.post(exchange_api_url.to_string())
+
+        if self.config.extra.registration_mode == "ssv" {
+            let mut pubkeys_str_list: String = "".to_string();
+            if !self.mux_pubkeys.is_empty() {
+                pubkeys_str_list = self.mux_pubkeys.iter()
+                    .map(|key| key.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
+
+                if self.config.extra.enable_registration == true {
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/register"))?;
+                } else {
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "deregistration of a list of mux keys is not currently supported!").into());
+                    // exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/deregister"))?;
+                }
+
+            } else {
+                if self.config.extra.enable_registration == true {
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/register/all"))?;
+                } else {
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/deregister/all"))?;
+                }
+            }
+            res = if !self.mux_pubkeys.is_empty() { 
+                client.post(exchange_api_url.to_string())
                     .header("User-Agent", "cb_ethgas_commit")
                     .header("Authorization", format!("Bearer {}", access_jwt))
                     .header("content-type", "application/json")
-                    .query(&[("publicKey", pubkey.to_string())])
+                    .query(&[("publicKeys", pubkeys_str_list)])
                     .send()
-                    .await?;
-                match res.json::<APILoginVerifyResponse>().await {
-                    Ok(res_json) => {
-                        if res_json.success {
-                            info!("successfully refreshed access jwt!");
-                            access_jwt = res_json.data.accessToken.token;
-                        } else {
-                            error!("failed to refresh access jwt");
-                        }
-                    },
-                    Err(err) => {
-                        error!(?err, "failed to call jwt refresh API");
-                    }
-                }
-            }
-            if !self.config.extra.enable_registration == false {
-                exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
-                res = client.post(exchange_api_url.to_string())
-                    .header("Authorization", format!("Bearer {}", access_jwt))
-                    .header("content-type", "application/json")
-                    .query(&[("publicKey", pubkey.to_string())])
-                    .send()
-                    .await?;
-                match res.json::<APIValidatorRegisterResponse>().await {
-                    Ok(res_json) => {
-                        info!(?res_json);
-
-                        match res_json.data.message {
-                            Some(api_validator_request_response_data_message) => {
-                                let info = RegisteredInfo {
-                                    eoaAddress: api_validator_request_response_data_message.eoaAddress
-                                };
-                                let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
-                                exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/verify"))?;
-
-                                // Request the signature from the signer client
-                                let signature = self.config
-                                    .signer_client
-                                    .request_consensus_signature(request)
-                                    .await?;
-
-                                res = client.post(exchange_api_url.to_string())
-                                    .header("Authorization", format!("Bearer {}", access_jwt))
-                                    .header("content-type", "application/json")
-                                    .query(&[("publicKey", pubkey.to_string())])
-                                    .query(&[("signature", signature.to_string())])
-                                    .send()
-                                    .await?;
-
-                                // println!("API Response as JSON: {}", res.json::<Value>().await?);
-                                match res.json::<APIValidatorVerifyResponse>().await {
-                                    Ok(res_json_verify) => {
-                                        info!(exchange_registration_response = ?res_json_verify);
-                                        
-                                        if res_json_verify.data.result == 0 {
-                                            if self.config.extra.enable_pricer {
-                                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
-                                            } else {
-                                                info!("successful registration, you can now sell preconfs on ETHGas!");
-                                            }
-                                        } else {
-                                            error!("failed to register");
-                                        }
-                                    },
-                                    Err(e) => error!("Failed to parse validator verification response: {}", e)
-                                }
-                            },
-                            None => warn!("this pubkey has been registered already"),
-                        }
-                    },
-                    Err(err) => {
-                        error!(?err, "failed to call validator register API");
-                    }
-                }
+                    .await?
             } else {
-                exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
-                res = client.post(exchange_api_url.to_string())
+                client.post(exchange_api_url.to_string())
+                    .header("User-Agent", "cb_ethgas_commit")
                     .header("Authorization", format!("Bearer {}", access_jwt))
                     .header("content-type", "application/json")
-                    .query(&[("publicKey", pubkey.to_string())])
                     .send()
-                    .await?;
-                match res.json::<APIValidatorDeregisterResponse>().await {
-                    Ok(res_json) => {
-                        info!(?res_json);
-                        if res_json.success {
-                            info!("successful de-registration!");
+                    .await?
+            };
+
+            let res_json = if !self.mux_pubkeys.is_empty() && self.config.extra.enable_registration == true {
+                APISsvValidatorResponse::Register(res.json::<APISsvValidatorRegisterResponse>().await?)
+            } else if self.mux_pubkeys.is_empty() && self.config.extra.enable_registration == true {
+                APISsvValidatorResponse::RegisterAll(res.json::<APISsvValidatorRegisterAllResponse>().await?)
+            } else {
+                APISsvValidatorResponse::DeregisterAll(res.json::<APISsvValidatorDeregisterAllResponse>().await?)
+            };
+
+            match res_json {
+                APISsvValidatorResponse::Register(res_json_ssv) => {
+                    if res_json_ssv.success {
+                        if !res_json_ssv.data.added.is_empty() {
+                            info!(registered_validator_keys = ?res_json_ssv.data.added);
+                            if self.config.extra.enable_pricer {
+                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                            } else {
+                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                            }
                         } else {
-                            error!("failed to de-register");
+                            error!("Failed to register as the mux keys doesn't match with the owner's associated SSV validators");
                         }
-                    },
-                    Err(err) => {
-                        error!(?err, "failed to call validator deregister API");
+                    } else {
+                        error!("Failed to register");
+                    }
+                },
+                APISsvValidatorResponse::RegisterAll(res_json_ssv) => {
+                    if res_json_ssv.success {
+                        if res_json_ssv.data.size > 0 {
+                            info!(number_of_registered_validator_keys = ?res_json_ssv.data.size);
+                            if self.config.extra.enable_pricer {
+                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                            } else {
+                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                            }
+                        } else {
+                            error!("Failed to register as the owner doesn't have any associated SSV validator");
+                        }
+                    } else {
+                        error!("Failed to register");
+                    }
+                },
+                APISsvValidatorResponse::DeregisterAll(res_json_ssv) => {                    
+                    if res_json_ssv.success {
+                        if res_json_ssv.data.removed > 0 {
+                            info!(number_of_deregistered_validator_keys = ?res_json_ssv.data.removed);
+                            info!("successful de-registration");
+                        } else {
+                            error!("Failed to de-register as there is no registered SSV validator");
+                        }
+                    } else {
+                        error!("Failed to de-register");
                     }
                 }
             }
-            sleep(Duration::from_millis(250)).await;
+
+        } else if self.config.extra.registration_mode == "standard" {
+
+            let pubkeys = if !self.mux_pubkeys.is_empty() {
+                self.mux_pubkeys.clone()
+            } else {
+                let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
+                let mut client_pubkeys = Vec::new();
+                for proxy_map in client_pubkeys_response.keys {
+                    client_pubkeys.push(proxy_map.consensus);
+                }
+                client_pubkeys
+            };
+
+            for i in 0..pubkeys.len() {
+                let pubkey = pubkeys[i];
+                info!(pubkey_counter = i, ?pubkey);
+                if i % 10000 == 0 && i != 0 {
+                    exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
+                    res = client.post(exchange_api_url.to_string())
+                        .header("User-Agent", "cb_ethgas_commit")
+                        .header("Authorization", format!("Bearer {}", access_jwt))
+                        .header("content-type", "application/json")
+                        .query(&[("publicKey", pubkey.to_string())])
+                        .send()
+                        .await?;
+                    match res.json::<APILoginVerifyResponse>().await {
+                        Ok(res_json) => {
+                            if res_json.success {
+                                info!("successfully refreshed access jwt!");
+                                access_jwt = res_json.data.accessToken.token;
+                            } else {
+                                error!("failed to refresh access jwt");
+                            }
+                        },
+                        Err(err) => {
+                            error!(?err, "failed to call jwt refresh API");
+                        }
+                    }
+                }
+                if !self.config.extra.enable_registration == false {
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
+                    res = client.post(exchange_api_url.to_string())
+                        .header("Authorization", format!("Bearer {}", access_jwt))
+                        .header("content-type", "application/json")
+                        .query(&[("publicKey", pubkey.to_string())])
+                        .send()
+                        .await?;
+                    match res.json::<APIValidatorRegisterResponse>().await {
+                        Ok(res_json) => {
+                            info!(?res_json);
+
+                            match res_json.data.message {
+                                Some(api_validator_request_response_data_message) => {
+                                    let info = RegisteredInfo {
+                                        eoaAddress: api_validator_request_response_data_message.eoaAddress
+                                    };
+                                    let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
+                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/verify"))?;
+
+                                    // Request the signature from the signer client
+                                    let signature = self.config
+                                        .signer_client
+                                        .request_consensus_signature(request)
+                                        .await?;
+
+                                    res = client.post(exchange_api_url.to_string())
+                                        .header("Authorization", format!("Bearer {}", access_jwt))
+                                        .header("content-type", "application/json")
+                                        .query(&[("publicKey", pubkey.to_string())])
+                                        .query(&[("signature", signature.to_string())])
+                                        .send()
+                                        .await?;
+
+                                    // println!("API Response as JSON: {}", res.json::<Value>().await?);
+                                    match res.json::<APIValidatorVerifyResponse>().await {
+                                        Ok(res_json_verify) => {
+                                            info!(exchange_registration_response = ?res_json_verify);
+                                            
+                                            if res_json_verify.data.result == 0 {
+                                                if self.config.extra.enable_pricer {
+                                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                                } else {
+                                                    info!("successful registration, you can now sell preconfs on ETHGas!");
+                                                }
+                                            } else {
+                                                error!("failed to register");
+                                            }
+                                        },
+                                        Err(e) => error!("Failed to parse validator verification response: {}", e)
+                                    }
+                                },
+                                None => warn!("this pubkey has been registered already"),
+                            }
+                        },
+                        Err(err) => {
+                            error!(?err, "failed to call validator register API");
+                        }
+                    }
+                } else {
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
+                    res = client.post(exchange_api_url.to_string())
+                        .header("Authorization", format!("Bearer {}", access_jwt))
+                        .header("content-type", "application/json")
+                        .query(&[("publicKey", pubkey.to_string())])
+                        .send()
+                        .await?;
+                    match res.json::<APIValidatorDeregisterResponse>().await {
+                        Ok(res_json) => {
+                            info!(?res_json);
+                            if res_json.success {
+                                info!("successful de-registration!");
+                            } else {
+                                error!("failed to de-register");
+                            }
+                        },
+                        Err(err) => {
+                            error!(?err, "failed to call validator deregister API");
+                        }
+                    }
+                }
+                sleep(Duration::from_millis(250)).await;
+            }
+        } else if self.config.extra.registration_mode == "skipped" {
+            info!("skipped registration or de-registration");
+        } else {
+            error!("invalid registration mode");
         }
 
         exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
