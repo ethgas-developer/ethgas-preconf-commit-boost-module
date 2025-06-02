@@ -1,6 +1,10 @@
 use commit_boost::prelude::*;
 use alloy::{
-    primitives::B256, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode
+    primitives::{B256, U256}, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode,
+    providers::ProviderBuilder,
+    network::EthereumWallet,
+    contract::{Interface, ContractInstance},
+    dyn_abi::DynSolValue,
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -8,7 +12,7 @@ use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 use std::{
-    time::Duration, error::Error, env, str::FromStr
+    time::Duration, error::Error, env, str::FromStr, sync::Arc
 };
 use reqwest::{Client, Url};
 use tokio::time::sleep;
@@ -39,7 +43,9 @@ struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
     access_jwt: String,
     refresh_jwt: String,
-    mux_pubkeys: Vec<BlsPublicKey>
+    mux_pubkeys: Vec<BlsPublicKey>,
+    eoa_signing_key: B256,
+    rpc_url: Url,
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -61,12 +67,24 @@ struct ExtraConfig {
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
-    refresh_jwt: Option<String>
+    refresh_jwt: Option<String>,
+    urc_addr: alloy::primitives::Address,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
 struct RegisteredInfo {
     eoaAddress: alloy::primitives::Address,
+}
+
+#[derive(Debug, TreeHash, Deserialize)]
+struct FabricRegisteredInfo {
+    owner: alloy::primitives::Address,
+}
+
+#[derive(Debug)]
+struct SignedRegistration {
+    pubkey: BlsPublicKey,
+    signature: BlsSignature,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -571,6 +589,58 @@ impl EthgasCommitService {
                 }
                 sleep(Duration::from_millis(250)).await;
             }
+        } else if self.config.extra.registration_mode == "fabric" {
+            let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
+                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+
+            let pubkeys = if !self.mux_pubkeys.is_empty() {
+                self.mux_pubkeys.clone()
+            } else {
+                let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
+                let mut client_pubkeys = Vec::new();
+                for proxy_map in client_pubkeys_response.keys {
+                    client_pubkeys.push(proxy_map.consensus);
+                }
+                client_pubkeys
+            };
+
+            let mut registrations = Vec::<SignedRegistration>::new();
+            for i in 0..pubkeys.len() {
+                let pubkey = pubkeys[i];
+                info!(pubkey_counter = i, ?pubkey);
+
+                if self.config.extra.enable_registration == true {
+                    let info = FabricRegisteredInfo {
+                        owner: signer.clone().address()
+                    };
+                    let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
+                    // Request the signature from the signer client
+                    let signature = self.config
+                        .signer_client
+                        .request_consensus_signature(request)
+                        .await?;
+                    
+                    registrations.push(SignedRegistration {
+                        pubkey,
+                        signature,
+                    });
+                }
+            }
+            let wallet = EthereumWallet::from(signer);
+            let provider = ProviderBuilder::new().wallet(wallet).on_http(self.rpc_url.clone());
+            const ABI: &str = r#"[{ "type": "function", "name": "register", "inputs": [ { "name": "registrations", "type": "tuple[]", "internalType": "struct IRegistry.SignedRegistration[]", "components": [ { "name": "pubkey", "type": "tuple", "internalType": "struct BLS.G1Point", "components": [ { "name": "x", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] }, { "name": "y", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] } ] }, { "name": "signature", "type": "tuple", "internalType": "struct BLS.G2Point", "components": [ { "name": "x", "type": "tuple", "internalType": "struct BLS.Fp2", "components": [ { "name": "c0", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] }, { "name": "c1", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] } ] }, { "name": "y", "type": "tuple", "internalType": "struct BLS.Fp2", "components": [ { "name": "c0", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] }, { "name": "c1", "type": "tuple", "internalType": "struct BLS.Fp", "components": [ { "name": "a", "type": "uint256", "internalType": "uint256" }, { "name": "b", "type": "uint256", "internalType": "uint256" } ] } ] } ] } ] }, { "name": "owner", "type": "address", "internalType": "address" } ], "outputs": [ { "name": "registrationRoot", "type": "bytes32", "internalType": "bytes32" } ], "stateMutability": "payable" }]"#;
+
+            let abi = serde_json::from_str(&ABI)?;
+            let contract = ContractInstance::new(self.config.extra.urc_addr, provider, Interface::new(abi));
+            let registrations_ = DynSolValue::Array(registrations);
+            let owner_ = DynSolValue::Address(signer.clone().address());
+            let wei_amount_decimal = (Decimal::from_str(&self.config.extra.collateral_per_slot)? * Decimal::from_str("1000000000000000000")?).round_dp(0);
+            let pending_transaction_builder = contract
+                .function("register", &[registrations_, owner_])?
+                .value(U256::from_str(&wei_amount_decimal.to_string())?)
+                .send()
+                .await?;
+            info!("Pending transaction hash: {:?}", pending_transaction_builder.tx_hash());
         } else if self.config.extra.registration_mode == "skipped" {
             info!("skipped registration or de-registration");
         } else {
@@ -639,6 +709,16 @@ async fn main() -> Result<()> {
                     }
                 };
 
+                let rpc_url = match Arc::try_unwrap(pbs_config.pbs_config) {
+                    Ok(pbs_config) => {
+                        pbs_config.rpc_url.expect("Failed to get RPC URL")
+                    },
+                    Err(_arc) => {
+                        error!("Failed to get RPC URL");
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to get RPC URL").into());
+                    }
+                };
+
                 let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
                 if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot > Decimal::new(1000, 0) || collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
                     error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
@@ -647,29 +727,31 @@ async fn main() -> Result<()> {
 
                 let access_jwt: String;
                 let refresh_jwt: String;
+                let eoa_signing_key: B256 = match config.extra.eoa_signing_key.clone() {
+                    Some(eoa) => eoa,
+                    None => {
+                        match env::var("EOA_SIGNING_KEY") {
+                            Ok(eoa) => {
+                                B256::from_str(&eoa).map_err(|_| {
+                                    error!("Invalid EOA_SIGNING_KEY format"); 
+                                    std::io::Error::new(std::io::ErrorKind::InvalidData, "EOA_SIGNING_KEY format error")
+                                })?
+                            },
+                            Err(_) => {
+                                error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
+                                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                "eoa_signing_key missing").into());
+                            }
+                        }
+                    }
+                };
+                let exchange_service: EthgasExchangeService;
                 if config.extra.is_jwt_provided == false {
-                    let exchange_service = EthgasExchangeService {
+                    exchange_service = EthgasExchangeService {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
                         chain_id: config.extra.chain_id.clone(),
                         entity_name: config.extra.entity_name.clone(),
-                        eoa_signing_key: match config.extra.eoa_signing_key.clone() {
-                            Some(eoa) => eoa,
-                            None => {
-                                match env::var("EOA_SIGNING_KEY") {
-                                    Ok(eoa) => {
-                                        B256::from_str(&eoa).map_err(|_| {
-                                            error!("Invalid EOA_SIGNING_KEY format"); 
-                                            std::io::Error::new(std::io::ErrorKind::InvalidData, "EOA_SIGNING_KEY format error")
-                                        })?
-                                    },
-                                    Err(_) => {
-                                        error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
-                                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                        "eoa_signing_key missing").into());
-                                    }
-                                }
-                            }
-                        }
+                        eoa_signing_key
                     };
                     (access_jwt, refresh_jwt) = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
                         let service = EthgasExchangeService {
@@ -729,7 +811,7 @@ async fn main() -> Result<()> {
                 };
 
                 if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
-                    let commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys };
+                    let commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys, eoa_signing_key, rpc_url };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }

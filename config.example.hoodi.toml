@@ -228,11 +228,12 @@ docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://hoodi.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 wait_interval_in_second = 0
-registration_mode = "standard" # standard, ssv, skipped
+registration_mode = "standard" # standard, ssv, fabric, skipped
+urc_addr = "0x..."
 enable_registration = true
 enable_pricer = true
 enable_builder = false
-collateral_per_slot = "0.01"
+collateral_per_slot = "0"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
