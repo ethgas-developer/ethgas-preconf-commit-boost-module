@@ -60,10 +60,10 @@ rpc_url = "https://ethereum-rpc.publicnode.com"
 [[relays]]
 # Relay ID to use in telemetry
 # OPTIONAL, DEFAULT: URL hostname
-id = "ethgas"
+id = "ethgas-us"
 # Relay URL in the format scheme://pubkey@host
 # Please DO NOT change the url to use any other relay, otherwise you will get slashed
-url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@relay.ethgas.com"
+url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
@@ -97,6 +97,14 @@ frequency_get_header_ms = 300
 # Maximum number of validators to register in a single request.
 # OPTIONAL, DEFAULT: "" (unlimited)
 validator_registration_batch_size = ""
+
+[[relays]]
+id = "ethgas-eu"
+url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@eu-relay.ethgas.com"
+
+[[relays]]
+id = "ethgas-ap"
+url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@ap-relay.ethgas.com"
 
 # Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
 # Note that:
