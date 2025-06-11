@@ -5,7 +5,7 @@ rust-version = "1.83"
 edition = "2021"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "6b6b10f6cd9dde3eb361bbe146016ab6b42b276f" } # v0.7.0
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "0661f17257065b49b374384231b294b6b75dca2f" } # v0.8.0-rc.2
 
 # ethereum
 alloy = { version = "0.12", features = [
