@@ -290,7 +290,7 @@ impl EthgasExchangeService {
 }
 
 impl EthgasCommitService {
-    pub async fn run(self) -> Result<(), Box<dyn Error>> {
+    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let client = Client::new();
 
         let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/pricer?enable=", self.config.extra.enable_pricer))?;
@@ -353,7 +353,7 @@ impl EthgasCommitService {
             }
         }
 
-        let mut access_jwt = self.access_jwt;
+        let mut access_jwt = self.access_jwt.clone();
 
         if self.config.extra.registration_mode == "ssv" {
             let mut pubkeys_str_list: String = "".to_string();
@@ -729,7 +729,7 @@ async fn main() -> Result<()> {
                 };
 
                 if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
-                    let commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys };
+                    let mut commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }

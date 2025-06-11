@@ -139,7 +139,7 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 # late_in_slot_time_ms = 1500
 # For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys
 # Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored
-# The fields specified here are the same as in [[relays]] (headers, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
+# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
 # [[mux.relays]]
 # id = "ethgas"
 # url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@relay.ethgas.com"
@@ -150,9 +150,9 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 #   - Dirk: a remote Dirk instance
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module)
+# [signer]
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
-# [signer]
 # docker_image = "ghcr.io/commit-boost/signer:latest"
 # For Remote signer:
 # [signer.remote]
@@ -239,10 +239,9 @@ wait_interval_in_second = 0
 registration_mode = "standard" # standard, ssv, skipped
 enable_registration = true
 enable_pricer = true
-enable_builder = true
+enable_builder = false
 collateral_per_slot = "0"
-builder_pubkey = "0xb7c5beefbaea0b050764617a764d571929a8a250e9e1226a3c31c738d05ea1fc8b3f2d455e15d623f6a64d52e4f84761" # btcs.com
-# builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000" # set this if enable_builder = false
+builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
