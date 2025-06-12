@@ -90,10 +90,10 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 enable_timing_games = false
 # Target time in slot when to send the first header request
 # OPTIONAL
-target_first_request_ms = 200
+target_first_request_ms = 0
 # Frequency in ms to send get_header requests
 # OPTIONAL
-frequency_get_header_ms = 300
+frequency_get_header_ms = 200
 # Maximum number of validators to register in a single request.
 # OPTIONAL, DEFAULT: "" (unlimited)
 validator_registration_batch_size = ""
@@ -101,10 +101,16 @@ validator_registration_batch_size = ""
 [[relays]]
 id = "ethgas-eu"
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@eu-relay.ethgas.com"
+enable_timing_games = false
+target_first_request_ms = 0
+frequency_get_header_ms = 200
 
 [[relays]]
 id = "ethgas-ap"
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@ap-relay.ethgas.com"
+enable_timing_games = false
+target_first_request_ms = 0
+frequency_get_header_ms = 200
 
 # Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
 # Note that:
