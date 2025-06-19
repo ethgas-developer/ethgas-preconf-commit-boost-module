@@ -17,7 +17,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Registration of SSV validators can skip signer-related setup below
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
-* For remote signer module, Commit Boost supports Web3Signer and Dirk. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details
+* For remote signer module, Commit Boost supports Web3Signer and Dirk. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details. You also need to update `CB_SIGNER_URL` to the remote signer URL in `docker-compose.yml`
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section where `id = ETHGAS_COMMIT`,
     * set your `entity_name`
@@ -39,6 +39,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Start the Signer module
 * For registration of non-SSV validators, run `docker-compose -f docker-compose.yml up cb_signer`
+    * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0-rc.2" commit_hash="0661f17257065b49b374384231b294b6b75dca2f" modules=["ETHGAS_COMMIT"] port=20000 loaded_consensus=100 loaded_proxies=0`
 
 ## Start the ETHGas Commit module
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
