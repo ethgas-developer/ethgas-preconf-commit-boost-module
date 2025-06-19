@@ -61,7 +61,9 @@ struct ExtraConfig {
     is_jwt_provided: bool,
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
-    refresh_jwt: Option<String>
+    refresh_jwt: Option<String>,
+    ssv_node_operator_owner_signing_keys: Vec<B256>,
+    ssv_node_operator_owner_validator_pubkeys: Vec<Vec<BlsPublicKey>>
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -169,11 +171,31 @@ struct APIValidatorVerifyResponseData {
     description: String
 }
 
-#[derive(Debug)]
-enum APISsvValidatorResponse {
-    Register(APISsvValidatorRegisterResponse),
-    RegisterAll(APISsvValidatorRegisterAllResponse),
-    DeregisterAll(APISsvValidatorDeregisterAllResponse),
+#[derive(Debug, Deserialize)]
+struct APISsvNodeOperatorRegisterResponse {
+    success: bool,
+    data: APISsvNodeOperatorRegisterResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvNodeOperatorRegisterResponseData {
+    messageToSign: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvNodeOperatorVerifySimpleResponse {
+    success: bool
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvNodeOperatorVerifyResponse {
+    success: bool,
+    data: APISsvNodeOperatorVerifyResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APISsvNodeOperatorVerifyResponseData {
+    validators: Vec<BlsPublicKey>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -184,31 +206,18 @@ struct APISsvValidatorRegisterResponse  {
 
 #[derive(Debug, Deserialize)]
 struct APISsvValidatorRegisterResponseData {
-    ssv: bool,
     added: Vec<BlsPublicKey>
 }
 
 #[derive(Debug, Deserialize)]
-struct APISsvValidatorRegisterAllResponse  {
+struct APISsvValidatorDeregisterResponse  {
     success: bool,
-    data: APISsvValidatorRegisterAllResponseData
+    data: APISsvValidatorDeregisterResponseData
 }
 
 #[derive(Debug, Deserialize)]
-struct APISsvValidatorRegisterAllResponseData {
-    ssv: bool,
-    size: u32
-}
-
-#[derive(Debug, Deserialize)]
-struct APISsvValidatorDeregisterAllResponse  {
-    success: bool,
-    data: APISsvValidatorDeregisterAllResponseData
-}
-
-#[derive(Debug, Deserialize)]
-struct APISsvValidatorDeregisterAllResponseData {
-    removed: u32
+struct APISsvValidatorDeregisterResponseData {
+    removed: Vec<BlsPublicKey>
 }
 
 #[derive(Debug, Deserialize)]
@@ -222,8 +231,30 @@ struct APIEnableBuilderResponse {
 }
 
 #[derive(Debug, Deserialize)]
-struct APIValidatorSettingsResponse {
+struct APICollateralPerSlotResponse {
     success: bool
+}
+
+async fn generate_eip712_signature(eip712_message_str: &str, signer: &PrivateKeySigner) -> Result<String> {
+    let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
+        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+    
+    let domain = eip712_domain! {
+        name: eip712_message.domain.name,
+        version: eip712_message.domain.version,
+        chain_id: eip712_message.domain.chainId,
+        verifying_contract: eip712_message.domain.verifyingContract,
+    };
+
+    let message = data {
+        hash: eip712_message.message.hash.clone(),
+        message: eip712_message.message.message,
+        domain: eip712_message.message.domain
+    };
+
+    let hash = message.eip712_signing_hash(&domain);
+    let signature = signer.sign_hash(&hash).await?;
+    Ok(encode(signature.as_bytes()))
 }
 
 impl EthgasExchangeService {
@@ -245,27 +276,12 @@ impl EthgasExchangeService {
         
         let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message)
             .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-        let eip712_domain_from_api = eip712_message.domain;
-        let eip712_sub_message = eip712_message.message;
-        let domain = eip712_domain! {
-            name: eip712_domain_from_api.name,
-            version: eip712_domain_from_api.version,
-            chain_id: eip712_domain_from_api.chainId,
-            verifying_contract: eip712_domain_from_api.verifyingContract,
-        };
-        let message = data {
-            hash: eip712_sub_message.hash.clone(),
-            message: eip712_sub_message.message,
-            domain: eip712_sub_message.domain
-        };
-        let hash = message.eip712_signing_hash(&domain);
-        let signature = signer.clone().sign_hash(&hash).await?;
-        let signature_hex = encode(signature.as_bytes());
+        let signature_hex = generate_eip712_signature(&res_json_login.data.eip712Message, &signer).await?;
         exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login/verify"))?;
         res = client.post(exchange_api_url.to_string())
                 .header("User-Agent", "cb_ethgas_commit")
                 .query(&[("addr", signer.clone().address())])
-                .query(&[("nonceHash", eip712_sub_message.hash)])
+                .query(&[("nonceHash", eip712_message.message.hash)])
                 .query(&[("signature", signature_hex)])
                 .send()
                 .await?;
@@ -355,96 +371,194 @@ impl EthgasCommitService {
 
         let mut access_jwt = self.access_jwt.clone();
 
-        if self.config.extra.registration_mode == "ssv" {
-            let mut pubkeys_str_list: String = "".to_string();
-            if !self.mux_pubkeys.is_empty() {
-                pubkeys_str_list = self.mux_pubkeys.iter()
-                    .map(|key| key.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",");
-
-                if self.config.extra.enable_registration == true {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/register"))?;
-                } else {
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "deregistration of a list of mux keys is not currently supported!").into());
-                    // exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/deregister"))?;
+        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/collateralPerSlot?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", access_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+        match res.json::<APICollateralPerSlotResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
+                    },
+                    false => {
+                        error!("failed to set collateral per slot");
+                    }
                 }
-
-            } else {
-                if self.config.extra.enable_registration == true {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/register/all"))?;
-                } else {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/ssv/deregister/all"))?;
-                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call validator collateral setting API");
             }
-            res = if !self.mux_pubkeys.is_empty() { 
-                client.post(exchange_api_url.to_string())
-                    .header("User-Agent", "cb_ethgas_commit")
-                    .header("Authorization", format!("Bearer {}", access_jwt))
-                    .header("content-type", "application/json")
-                    .query(&[("publicKeys", pubkeys_str_list)])
-                    .send()
-                    .await?
-            } else {
-                client.post(exchange_api_url.to_string())
-                    .header("User-Agent", "cb_ethgas_commit")
-                    .header("Authorization", format!("Bearer {}", access_jwt))
-                    .header("content-type", "application/json")
-                    .send()
-                    .await?
-            };
+        }
 
-            let res_json = if !self.mux_pubkeys.is_empty() && self.config.extra.enable_registration == true {
-                APISsvValidatorResponse::Register(res.json::<APISsvValidatorRegisterResponse>().await?)
-            } else if self.mux_pubkeys.is_empty() && self.config.extra.enable_registration == true {
-                APISsvValidatorResponse::RegisterAll(res.json::<APISsvValidatorRegisterAllResponse>().await?)
+        if self.config.extra.registration_mode == "ssv" {
+            let ssv_node_operator_owner_signing_keys = if !self.config.extra.ssv_node_operator_owner_signing_keys.is_empty() {
+                self.config.extra.ssv_node_operator_owner_signing_keys.clone()
             } else {
-                APISsvValidatorResponse::DeregisterAll(res.json::<APISsvValidatorDeregisterAllResponse>().await?)
+                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "ssv_node_operator_owner_signing_keys cannot be empty").into());
             };
+            if ssv_node_operator_owner_signing_keys.len() != self.config.extra.ssv_node_operator_owner_validator_pubkeys.len() {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
+            }
 
-            match res_json {
-                APISsvValidatorResponse::Register(res_json_ssv) => {
-                    if res_json_ssv.success {
-                        if !res_json_ssv.data.added.is_empty() {
-                            info!(registered_validator_keys = ?res_json_ssv.data.added);
-                            if self.config.extra.enable_pricer {
-                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
-                            } else {
-                                info!("successful registration, you can now sell preconfs on ETHGas!");
-                            }
-                        } else {
-                            error!("Failed to register as the mux keys doesn't match with the owner's associated SSV validators");
+            exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/register"))?;
+            res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", access_jwt))
+                .header("content-type", "application/json")
+                .query(&[("ownerAddress", "0x0000000000000000000000000000000000000000")]) // same message for any address in the same chain
+                .send()
+                .await?;
+
+            // println!("API Response as JSON: {}", res.json::<Value>().await?);
+            let res_json_ssv_node_operator_register = match res.json::<APISsvNodeOperatorRegisterResponse>().await {
+                Ok(result) => {
+                    match result.success {
+                        true => {
+                            info!(eip712_message = result.data.messageToSign);
+                            result
+                        },
+                        false => {
+                            return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                                "failed to get the SSV node operator registration message for signing").into());
                         }
-                    } else {
-                        error!("Failed to register");
                     }
                 },
-                APISsvValidatorResponse::RegisterAll(res_json_ssv) => {
-                    if res_json_ssv.success {
-                        if res_json_ssv.data.size > 0 {
-                            info!(number_of_registered_validator_keys = ?res_json_ssv.data.size);
-                            if self.config.extra.enable_pricer {
-                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
-                            } else {
-                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                Err(err) => {
+                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                        format!("failed to call the API to get the SSV node operator registration message for signing: {}", err)).into());
+                }
+            };
+
+            for i in 0..ssv_node_operator_owner_signing_keys.len() {
+                let signer = PrivateKeySigner::from_bytes(&ssv_node_operator_owner_signing_keys[i])
+                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                info!("SSV node operator owner address: {}", signer.clone().address());
+                let signature_hex = generate_eip712_signature(&res_json_ssv_node_operator_register.data.messageToSign, &signer).await?;
+                let auto_import = if self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].is_empty() && self.config.extra.enable_registration {
+                    true
+                } else {
+                    false
+                };
+                if auto_import {
+                    warn!("it will take up to 60 seconds to register all SSV validator pubkeys");
+                }
+                exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verify"))?;
+                res = client.post(exchange_api_url.to_string())
+                        .header("User-Agent", "cb_ethgas_commit")
+                        .query(&[("ownerAddress", signer.clone().address())])
+                        .query(&[("signature", signature_hex)])
+                        .query(&[("autoImport", auto_import)])
+                        .query(&[("sync", true)])
+                        .send()
+                        .await?;
+                if auto_import {
+                    match res.json::<APISsvNodeOperatorVerifyResponse>().await {
+                        Ok(result) => {
+                            match result.success {
+                                true => {
+                                    if self.config.extra.enable_pricer {
+                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                    } else {
+                                        info!("successful registration, you can now sell preconfs on ETHGas!");
+                                    }
+                                    info!(registered_validators = ?result.data.validators);
+                                },
+                                false => {
+                                    error!("failed to register ssv node operator owner address");
+                                }
                             }
-                        } else {
-                            error!("Failed to register as the owner doesn't have any associated SSV validator");
+                        },
+                        Err(err) => {
+                            error!(?err, "failed to call ssv operator verify API");
                         }
-                    } else {
-                        error!("Failed to register");
                     }
-                },
-                APISsvValidatorResponse::DeregisterAll(res_json_ssv) => {                    
-                    if res_json_ssv.success {
-                        if res_json_ssv.data.removed > 0 {
-                            info!(number_of_deregistered_validator_keys = ?res_json_ssv.data.removed);
-                            info!("successful de-registration");
-                        } else {
-                            error!("Failed to de-register as there is no registered SSV validator");
+                } else {
+                    match res.json::<APISsvNodeOperatorVerifySimpleResponse>().await {
+                        Ok(result) => {
+                            match result.success {
+                                true => {
+                                    info!("successfully registered ssv node operator owner address");
+                                },
+                                false => {
+                                    error!("failed to register ssv node operator owner address");
+                                }
+                            }
+                        },
+                        Err(err) => {
+                            error!(?err, "failed to call ssv operator verify API");
+                        }
+                    }
+
+                    let pubkeys_str_list = self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].iter()
+                            .map(|key| key.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",");
+                    if self.config.extra.enable_registration {
+                        exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/register"))?;
+                        res = client.post(exchange_api_url.to_string())
+                                .header("User-Agent", "cb_ethgas_commit")
+                                .query(&[("ownerAddress", signer.clone().address())])
+                                .query(&[("publicKeys", pubkeys_str_list)])
+                                .send()
+                                .await?;
+
+                        match res.json::<APISsvValidatorRegisterResponse>().await {
+                            Ok(result) => {
+                                match result.success {
+                                    true => {
+                                        if self.config.extra.enable_pricer {
+                                            info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                        } else {
+                                            info!("successful registration, you can now sell preconfs on ETHGas!");
+                                        }
+                                        info!(registered_validators = ?result.data.added);
+                                    },
+                                    false => {
+                                        error!("failed to register ssv validator pubkeys");
+                                    }
+                                }
+                            },
+                            Err(err) => {
+                                error!(?err, "failed to call ssv validator register API");
+                            }
                         }
                     } else {
-                        error!("Failed to de-register");
+                        exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/deregister"))?;
+                        res = if self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
+                            client.post(exchange_api_url.to_string())
+                                .header("User-Agent", "cb_ethgas_commit")
+                                .query(&[("ownerAddress", signer.clone().address())])
+                                .send()
+                                .await?
+                        } else {
+                            client.post(exchange_api_url.to_string())
+                                .header("User-Agent", "cb_ethgas_commit")
+                                .query(&[("ownerAddress", signer.clone().address())])
+                                .query(&[("publicKeys", pubkeys_str_list)])
+                                .send()
+                                .await?
+                        };
+
+                        match res.json::<APISsvValidatorDeregisterResponse>().await {
+                            Ok(result) => {
+                                match result.success {
+                                    true => {
+                                        info!(deregistered_validators = ?result.data.removed);
+                                    },
+                                    false => {
+                                        error!("failed to deregister ssv validator pubkeys");
+                                    }
+                                }
+                            },
+                            Err(err) => {
+                                error!(?err, "failed to call ssv validator deregister API");
+                            }
+                        }
+
                     }
                 }
             }
@@ -575,28 +689,6 @@ impl EthgasCommitService {
             info!("skipped registration or de-registration");
         } else {
             error!("invalid registration mode");
-        }
-
-        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/settings?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", access_jwt))
-                .header("content-type", "application/json")
-                .send()
-                .await?;
-        match res.json::<APIValidatorSettingsResponse>().await {
-            Ok(result) => {
-                match result.success {
-                    true => {
-                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
-                    },
-                    false => {
-                        error!("failed to set collateral per slot");
-                    }
-                }
-            },
-            Err(err) => {
-                error!(?err, "failed to call validator collateral setting API");
-            }
         }
 
         Ok(())
