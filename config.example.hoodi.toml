@@ -240,6 +240,17 @@ is_jwt_provided = false
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+# below 2 arrays are only for ssv validators
+ssv_node_operator_owner_signing_keys = [
+    "0x...",
+    "0x...",
+    "0x..."
+]
+ssv_node_operator_owner_validator_pubkeys = [
+    [], # this will trigger the registration of all associated BLS pubkeys obtained from SSV API
+    [ "0x...", "0x..." ],
+    [ "0x..." ]
+]
 
 
 # required only if cb_ethgas_deposit is run
