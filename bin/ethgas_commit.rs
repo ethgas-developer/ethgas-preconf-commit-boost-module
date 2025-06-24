@@ -51,7 +51,8 @@ struct ExtraConfig {
     exchange_api_base: String,
     chain_id: Option<String>, // not required, only for backward compatibility 
     entity_name: String,
-    wait_interval_in_second: u32,
+    overall_wait_interval_in_second: u32,
+    api_wait_interval_in_ms: Option<u32>,
     enable_pricer: bool,
     registration_mode: String,
     enable_registration: bool,
@@ -612,6 +613,10 @@ impl EthgasCommitService {
                 client_pubkeys
             };
 
+            let api_wait_interval_in_ms = match self.config.extra.api_wait_interval_in_ms {
+                Some(wait_interval) => wait_interval,
+                None => 0
+            };
             for i in 0..pubkeys.len() {
                 let pubkey = pubkeys[i];
                 info!(pubkey_counter = i, ?pubkey);
@@ -714,7 +719,7 @@ impl EthgasCommitService {
                         }
                     }
                 }
-                sleep(Duration::from_millis(250)).await;
+                sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
             }
         } else if self.config.extra.registration_mode == "skipped" {
             info!("skipped registration or deregistration");
@@ -735,7 +740,7 @@ async fn main() -> Result<()> {
 
     let _guard = initialize_tracing_log("ETHGAS_COMMIT", LogsSettings::from_env_config()?);
 
-    let mut wait_interval_in_second: u32 = 0;
+    let mut overall_wait_interval_in_second: u32 = 0;
     let mut counter: u32 = 0;
 
     loop {
@@ -746,7 +751,7 @@ async fn main() -> Result<()> {
                     MetricsProvider::load_and_run(config.chain, MY_CUSTOM_REGISTRY.clone())?;
                 }
 
-                wait_interval_in_second = config.extra.wait_interval_in_second;
+                overall_wait_interval_in_second = config.extra.overall_wait_interval_in_second;
 
                 info!(
                     module_id = %config.id,
@@ -868,11 +873,11 @@ async fn main() -> Result<()> {
                 return Err(err);
             }
         }
-        if wait_interval_in_second == 0 {
+        if overall_wait_interval_in_second == 0 {
             break;
         }
-        info!("waiting for {} seconds to start again...", wait_interval_in_second);
-        sleep(Duration::from_millis((wait_interval_in_second as u64) * 1000)).await;
+        info!("waiting for {} seconds to start again...", overall_wait_interval_in_second);
+        sleep(Duration::from_millis((overall_wait_interval_in_second as u64) * 1000)).await;
         counter += 1;
     }
     Ok(())
