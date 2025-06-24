@@ -29,7 +29,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set `enable_pricer = true` if you want to delegate to our default pricer to help you to sell preconfs
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
-    * `wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
+    * `overall_wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
+    * `api_wait_interval_in_ms` indicates the waiting time in millisecond before sending the next validator registration request
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * For non-SSV validators, set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
