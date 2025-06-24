@@ -450,17 +450,20 @@ impl EthgasCommitService {
                 }
             }
 
-        } else if self.config.extra.registration_mode == "standard" {
+        } else if self.config.extra.registration_mode == "standard" || self.config.extra.registration_mode == "mux-only" {
 
             let pubkeys = if !self.mux_pubkeys.is_empty() {
                 self.mux_pubkeys.clone()
-            } else {
+            } else if self.config.extra.registration_mode != "mux-only" {
                 let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
                 let mut client_pubkeys = Vec::new();
                 for proxy_map in client_pubkeys_response.keys {
                     client_pubkeys.push(proxy_map.consensus);
                 }
                 client_pubkeys
+            } else {
+                warn!("No pubkey found for registration in 'mux-only'. Please ensure you have registered your mux keys or set the registration mode to standard.");
+                Vec::new()
             };
 
             let api_wait_interval_in_ms = match self.config.extra.api_wait_interval_in_ms {
