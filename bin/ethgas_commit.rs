@@ -450,11 +450,11 @@ impl EthgasCommitService {
                 }
             }
 
-        } else if self.config.extra.registration_mode == "standard" || self.config.extra.registration_mode == "mux-only" {
+        } else if self.config.extra.registration_mode == "standard" || self.config.extra.registration_mode == "standard-mux" {
 
-            let pubkeys = if !self.mux_pubkeys.is_empty() {
+            let pubkeys = if !self.mux_pubkeys.is_empty() && self.config.extra.registration_mode == "standard-mux" {
                 self.mux_pubkeys.clone()
-            } else if self.config.extra.registration_mode != "mux-only" {
+            } else if self.mux_pubkeys.is_empty() && self.config.extra.registration_mode == "standard" {
                 let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
                 let mut client_pubkeys = Vec::new();
                 for proxy_map in client_pubkeys_response.keys {
@@ -462,7 +462,7 @@ impl EthgasCommitService {
                 }
                 client_pubkeys
             } else {
-                warn!("No pubkey found for registration in 'mux-only'. Please ensure you have registered your mux keys or set the registration mode to standard.");
+                warn!("ensure to specify list of pubkeys under mux config for standard-mux flag or comment out the mux config for standard flag");
                 Vec::new()
             };
 
