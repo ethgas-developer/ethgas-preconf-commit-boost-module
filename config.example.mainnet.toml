@@ -87,13 +87,13 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 #   - return 204 and force local build
 #
 # OPTIONAL, DEFAULT: false
-enable_timing_games = false
+enable_timing_games = true
 # Target time in slot when to send the first header request
 # OPTIONAL
 target_first_request_ms = 0
 # Frequency in ms to send get_header requests
 # OPTIONAL
-frequency_get_header_ms = 200
+frequency_get_header_ms = 100
 # Maximum number of validators to register in a single request.
 # OPTIONAL, DEFAULT: "" (unlimited)
 validator_registration_batch_size = ""
@@ -101,16 +101,16 @@ validator_registration_batch_size = ""
 [[relays]]
 id = "ethgas-eu"
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@eu-relay.ethgas.com"
-enable_timing_games = false
+enable_timing_games = true
 target_first_request_ms = 0
-frequency_get_header_ms = 200
+frequency_get_header_ms = 100
 
 [[relays]]
 id = "ethgas-ap"
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@ap-relay.ethgas.com"
-enable_timing_games = false
+enable_timing_games = true
 target_first_request_ms = 0
-frequency_get_header_ms = 200
+frequency_get_header_ms = 100
 
 # Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
 # Note that:
@@ -255,7 +255,17 @@ is_jwt_provided = false
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
-
+# below 2 arrays are only for ssv validators
+ssv_node_operator_owner_signing_keys = [
+    "0x...",
+    "0x...",
+    "0x..."
+]
+ssv_node_operator_owner_validator_pubkeys = [
+    [], # this will trigger the registration of all associated BLS pubkeys obtained from SSV API
+    [ "0x...", "0x..." ],
+    [ "0x..." ]
+]
 
 # required only if cb_ethgas_deposit is run
 [[modules]]
