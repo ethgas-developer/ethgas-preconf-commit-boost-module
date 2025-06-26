@@ -63,8 +63,8 @@ struct ExtraConfig {
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
-    ssv_node_operator_owner_signing_keys: Vec<B256>,
-    ssv_node_operator_owner_validator_pubkeys: Vec<Vec<BlsPublicKey>>
+    ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
+    ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -428,13 +428,21 @@ impl EthgasCommitService {
         }
 
         if self.config.extra.registration_mode == "ssv" {
-            let ssv_node_operator_owner_signing_keys = if !self.config.extra.ssv_node_operator_owner_signing_keys.is_empty() {
-                self.config.extra.ssv_node_operator_owner_signing_keys.clone()
-            } else {
+            let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
+                Some(signing_keys) => signing_keys,
+                None => return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "ssv_node_operator_owner_signing_keys cannot be empty").into())
+            };
+            if ssv_node_operator_owner_signing_keys.is_empty() {
                 return Err(std::io::Error::new(std::io::ErrorKind::Other,
                     "ssv_node_operator_owner_signing_keys cannot be empty").into());
             };
-            if ssv_node_operator_owner_signing_keys.len() != self.config.extra.ssv_node_operator_owner_validator_pubkeys.len() {
+            let ssv_node_operator_owner_validator_pubkeys = match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
+                Some(validator_pubkeys) => validator_pubkeys,
+                None => return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                    "ssv_node_operator_owner_validator_pubkeys cannot be empty").into())
+            };
+            if ssv_node_operator_owner_signing_keys.len() != ssv_node_operator_owner_validator_pubkeys.len() {
                 return Err(std::io::Error::new(std::io::ErrorKind::Other,
                     "ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
             }
@@ -504,14 +512,14 @@ impl EthgasCommitService {
                     }
                 }
 
-                let pubkeys_str_list = self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].iter()
+                let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i].iter()
                         .map(|key| key.to_string())
                         .collect::<Vec<String>>()
                         .join(",");
                 if self.config.extra.enable_registration {
                     warn!("it may take up to 30 seconds to register all SSV validator pubkeys if there are many pubkeys");
                     exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/register"))?;
-                    res = if self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
+                    res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
                         client.post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
@@ -557,7 +565,7 @@ impl EthgasCommitService {
                     }
                 } else {
                     exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/deregister"))?;
-                    res = if self.config.extra.ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
+                    res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
                         client.post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))

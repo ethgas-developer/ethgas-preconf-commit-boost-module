@@ -18,7 +18,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
 * For remote signer module, Commit Boost supports Web3Signer and Dirk. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#remote-signer) for more details. You also need to update `CB_SIGNER_URL` to the remote signer URL in `docker-compose.yml`
-    * for Web3Signer, set `--commit-boost-api-enabled=true` when you run the `web3signer` command
+    * for Web3Signer, set `--commit-boost-api-enabled=true`, a placeholder dir for `--proxy-keystores-path` and a placeholder file for `--proxy-keystores-password-file` when you run the `web3signer` command
 * Set ETHGas Commit module config in `config.toml`
     * under `[[modules]]` section where `id = ETHGAS_COMMIT`,
     * set your `entity_name`
