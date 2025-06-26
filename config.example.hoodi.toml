@@ -247,6 +247,7 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     "0x...",
 #     "0x..."
 # ]
+# Alternatively, you can set SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS=0x...,0x... in .cb.env as an env variable
 # ssv_node_operator_owner_validator_pubkeys = [
 #     [], # this will trigger the registration of all associated BLS pubkeys obtained from SSV API
 #     [ "0x...", "0x..." ],

@@ -429,16 +429,29 @@ impl EthgasCommitService {
 
         if self.config.extra.registration_mode == "ssv" {
             let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
-                Some(signing_keys) => signing_keys,
-                None => return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                    "ssv_node_operator_owner_signing_keys cannot be empty").into())
+                Some(signing_keys) => signing_keys.clone(),
+                None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
+                    Ok(signing_keys_str) => {
+                        signing_keys_str.split(',')
+                            .filter(|s| !s.trim().is_empty())
+                            .map(|key| B256::from_str(key.trim()).map_err(|_| {
+                                std::io::Error::new(std::io::ErrorKind::InvalidData, 
+                                    format!("Invalid signing key format"))
+                            }))
+                            .collect::<Result<Vec<B256>, _>>()?
+                    },
+                    Err(_) => {
+                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
+                            "ssv_node_operator_owner_signing_keys cannot be empty").into());
+                    }
+                }
             };
             if ssv_node_operator_owner_signing_keys.is_empty() {
                 return Err(std::io::Error::new(std::io::ErrorKind::Other,
                     "ssv_node_operator_owner_signing_keys cannot be empty").into());
             };
             let ssv_node_operator_owner_validator_pubkeys = match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
-                Some(validator_pubkeys) => validator_pubkeys,
+                Some(validator_pubkeys) => validator_pubkeys.clone(),
                 None => return Err(std::io::Error::new(std::io::ErrorKind::Other,
                     "ssv_node_operator_owner_validator_pubkeys cannot be empty").into())
             };
@@ -464,9 +477,7 @@ impl EthgasCommitService {
                     Ok(result) => {
                         match result.success {
                             true => {
-                                if result.data.available {
-                                    info!(eip712_message_ssv = result.data.messageToSign);
-                                } else {
+                                if result.data.available == false {
                                     warn!("ssv node operator owner address has been registered");
                                 }
                                 result
