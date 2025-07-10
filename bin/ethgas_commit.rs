@@ -147,7 +147,6 @@ struct APIValidatorRegisterResponse {
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponseData {
-    available: bool,
     message: Option<RegisteredInfo>
 }
 
@@ -373,7 +372,7 @@ impl EthgasCommitService {
             }
         }
 
-        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKey=", self.config.extra.builder_pubkey))?;
+        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKeys=", self.config.extra.builder_pubkey))?;
         res = client.post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", self.access_jwt))
                 .header("content-type", "application/json")
@@ -664,7 +663,7 @@ impl EthgasCommitService {
                         }
                     }
                 }
-                if !self.config.extra.enable_registration == false {
+                if self.config.extra.enable_registration {
                     exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
                     res = client.post(exchange_api_url.to_string())
                         .header("Authorization", format!("Bearer {}", access_jwt))

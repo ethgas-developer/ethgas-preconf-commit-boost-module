@@ -1,11 +1,11 @@
 [package]
 name = "ethgas_commit_boost_modules"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.4c"
 rust-version = "1.83"
 edition = "2021"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "0661f17257065b49b374384231b294b6b75dca2f" } # v0.8.0-rc.2
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "f51f5bd61831fde943057b29ffd6e26e7eb23765" } # v0.8.0
 
 # ethereum
 alloy = { version = "0.12", features = [

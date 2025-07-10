@@ -83,6 +83,8 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 * To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
 * Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
+## Audit
+* The module has been audited by [Sigma Prime](https://github.com/ethgas-developer/ethgas-audit)
 
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)

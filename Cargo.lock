@@ -1335,7 +1335,7 @@ dependencies = [
 [[package]]
 name = "bls"
 version = "0.2.0"
-source = "git+https://github.com/sigp/lighthouse?rev=8d058e4040b765a96aa4968f4167af7571292be2#8d058e4040b765a96aa4968f4167af7571292be2"
+source = "git+https://github.com/sigp/lighthouse?tag=v7.0.1#e42406d7b79a85ad4622f3a7440ff6468ac4c9e1"
 dependencies = [
  "alloy-primitives",
  "arbitrary",
@@ -1498,8 +1498,8 @@ dependencies = [
 
 [[package]]
 name = "cb-cli"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "cb-common",
  "clap",
@@ -1511,8 +1511,8 @@ dependencies = [
 
 [[package]]
 name = "cb-common"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "aes 0.8.4",
  "alloy",
@@ -1532,6 +1532,7 @@ dependencies = [
  "jsonwebtoken",
  "pbkdf2 0.12.2",
  "rand 0.9.0",
+ "rayon",
  "reqwest",
  "serde",
  "serde_json",
@@ -1553,8 +1554,8 @@ dependencies = [
 
 [[package]]
 name = "cb-metrics"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "axum 0.8.3",
  "cb-common",
@@ -1567,8 +1568,8 @@ dependencies = [
 
 [[package]]
 name = "cb-pbs"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "alloy",
  "async-trait",
@@ -1593,8 +1594,8 @@ dependencies = [
 
 [[package]]
 name = "cb-signer"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "alloy",
  "axum 0.8.3",
@@ -1750,8 +1751,8 @@ checksum = "5b63caa9aa9397e2d9480a9b13673856c78d8ac123288526c37d7839f2a86990"
 
 [[package]]
 name = "commit-boost"
-version = "0.8.0-rc.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=0661f17257065b49b374384231b294b6b75dca2f#0661f17257065b49b374384231b294b6b75dca2f"
+version = "0.8.0"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=f51f5bd61831fde943057b29ffd6e26e7eb23765#f51f5bd61831fde943057b29ffd6e26e7eb23765"
 dependencies = [
  "cb-cli",
  "cb-common",
@@ -1850,6 +1851,25 @@ name = "crossbeam-channel"
 version = "0.5.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "82b8f8f868b36967f9606790d1903570de9ceaf870a7bf9fbbd3016d636a2cb2"
+dependencies = [
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-deque"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dd111b7b7f7d55b72c0a6ae361660ee5853c9af73f70c3c2ef6858b950e2e51"
+dependencies = [
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.18"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5b82ac4a3c2ca9c3460964f020e1402edd5753411d7737aa39c3714ad1b5420e"
 dependencies = [
  "crossbeam-utils",
 ]
@@ -2203,11 +2223,11 @@ dependencies = [
 [[package]]
 name = "eth2_key_derivation"
 version = "0.1.0"
-source = "git+https://github.com/sigp/lighthouse?rev=8d058e4040b765a96aa4968f4167af7571292be2#8d058e4040b765a96aa4968f4167af7571292be2"
+source = "git+https://github.com/sigp/lighthouse?tag=v7.0.1#e42406d7b79a85ad4622f3a7440ff6468ac4c9e1"
 dependencies = [
  "bls",
  "num-bigint-dig",
- "ring 0.16.20",
+ "ring",
  "sha2 0.9.9",
  "zeroize",
 ]
@@ -2215,7 +2235,7 @@ dependencies = [
 [[package]]
 name = "eth2_keystore"
 version = "0.1.0"
-source = "git+https://github.com/sigp/lighthouse?rev=8d058e4040b765a96aa4968f4167af7571292be2#8d058e4040b765a96aa4968f4167af7571292be2"
+source = "git+https://github.com/sigp/lighthouse?tag=v7.0.1#e42406d7b79a85ad4622f3a7440ff6468ac4c9e1"
 dependencies = [
  "aes 0.7.5",
  "bls",
@@ -2241,7 +2261,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c853bd72c9e5787f8aafc3df2907c2ed03cff3150c3acd94e2e53a98ab70a8ab"
 dependencies = [
  "cpufeatures",
- "ring 0.17.8",
+ "ring",
  "sha2 0.10.8",
 ]
 
@@ -2298,7 +2318,7 @@ dependencies = [
 
 [[package]]
 name = "ethgas_commit_boost_modules"
-version = "1.0.0-beta.2"
+version = "1.0.0-beta.4c"
 dependencies = [
  "alloy",
  "axum 0.8.3",
@@ -2378,7 +2398,7 @@ dependencies = [
 [[package]]
 name = "fixed_bytes"
 version = "0.1.0"
-source = "git+https://github.com/sigp/lighthouse?rev=8d058e4040b765a96aa4968f4167af7571292be2#8d058e4040b765a96aa4968f4167af7571292be2"
+source = "git+https://github.com/sigp/lighthouse?tag=v7.0.1#e42406d7b79a85ad4622f3a7440ff6468ac4c9e1"
 dependencies = [
  "alloy-primitives",
  "safe_arith",
@@ -3013,7 +3033,7 @@ checksum = "5a87cc7a48537badeae96744432de36f4be2b4a34a05a5ef32e9dd8a1c169dde"
 dependencies = [
  "base64 0.22.1",
  "js-sys",
- "ring 0.17.8",
+ "ring",
  "serde",
  "serde_json",
 ]
@@ -3057,7 +3077,7 @@ version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bbd2bcb4c963f2ddae06a2efc7e9f3591312473c50c6685e1f298068316e66fe"
 dependencies = [
- "spin 0.9.8",
+ "spin",
 ]
 
 [[package]]
@@ -3852,6 +3872,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "rayon"
+version = "1.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b418a60154510ca1a002a752ca9714984e21e4241e804d32555251faf8b78ffa"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1465873a3dfdaa8ae7cb14b4383657caab0b3e8a0aa9ae8e04b044854c8dfce2"
+dependencies = [
+ "crossbeam-deque",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "recvmsg"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3976,21 +4016,6 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.16.20"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
-dependencies = [
- "cc",
- "libc",
- "once_cell",
- "spin 0.5.2",
- "untrusted 0.7.1",
- "web-sys",
- "winapi",
-]
-
-[[package]]
-name = "ring"
 version = "0.17.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c17fa4cb658e3583423e915b9f3acc01cceaee1860e33d59ebae66adc3a2dc0d"
@@ -3999,8 +4024,8 @@ dependencies = [
  "cfg-if",
  "getrandom 0.2.15",
  "libc",
- "spin 0.9.8",
- "untrusted 0.9.0",
+ "spin",
+ "untrusted",
  "windows-sys 0.52.0",
 ]
 
@@ -4146,7 +4171,7 @@ checksum = "5fbb44d7acc4e873d613422379f69f237a1b141928c02f6bc6ccfddddc2d7993"
 dependencies = [
  "log",
  "once_cell",
- "ring 0.17.8",
+ "ring",
  "rustls-pki-types",
  "rustls-webpki",
  "subtle",
@@ -4174,9 +4199,9 @@ version = "0.102.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "64ca1bc8749bd4cf37b5ce386cc146580777b4e8572c7b97baf22c83f444bee9"
 dependencies = [
- "ring 0.17.8",
+ "ring",
  "rustls-pki-types",
- "untrusted 0.9.0",
+ "untrusted",
 ]
 
 [[package]]
@@ -4206,7 +4231,7 @@ checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 [[package]]
 name = "safe_arith"
 version = "0.1.0"
-source = "git+https://github.com/sigp/lighthouse?rev=8d058e4040b765a96aa4968f4167af7571292be2#8d058e4040b765a96aa4968f4167af7571292be2"
+source = "git+https://github.com/sigp/lighthouse?tag=v7.0.1#e42406d7b79a85ad4622f3a7440ff6468ac4c9e1"
 
 [[package]]
 name = "salsa20"
@@ -4576,12 +4601,6 @@ dependencies = [
  "libc",
  "windows-sys 0.52.0",
 ]
-
-[[package]]
-name = "spin"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e63cff320ae2c57904679ba7cb63280a3dc4613885beafb148ee7bf9aa9042d"
 
 [[package]]
 name = "spin"
@@ -5365,12 +5384,6 @@ name = "unsafe-libyaml"
 version = "0.2.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "673aac59facbab8a9007c7f6108d11f63b603f7cabff99fabf650fea5c32b861"
-
-[[package]]
-name = "untrusted"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a156c684c91ea7d62626509bce3cb4e1d9ed5c4d978f7b4352658f96a4c26b4a"
 
 [[package]]
 name = "untrusted"
