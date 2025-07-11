@@ -67,6 +67,9 @@ url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
+# GET parameters to add to each request URL for this relay
+# OPTIONAL
+# get_params = { param1 = "value1", param2 = "value2" }
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
 # These values should be carefully chosen for each relay, as each relay has different latency and timing games setups.
 # They should only be used by advanced users, and if mis-configured can result in unforeseen effects, e.g. fetching a lower header value,
@@ -131,7 +134,7 @@ validator_registration_batch_size = ""
 # late_in_slot_time_ms = 1500
 # For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys
 # Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored
-# The fields specified here are the same as in [[relays]] (headers, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
+# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
 # [[mux.relays]]
 # id = "ethgas"
 # url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
@@ -142,10 +145,17 @@ validator_registration_batch_size = ""
 #   - Dirk: a remote Dirk instance
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module)
+# [signer]
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
-# [signer]
 # docker_image = "ghcr.io/commit-boost/signer:latest"
+# Host to bind the Signer API server to
+# OPTIONAL, DEFAULT: 127.0.0.1
+host = "0.0.0.0"
+# Port to listen for Signer API calls on
+# OPTIONAL, DEFAULT: 20000
+port = 20000
+
 # For Remote signer:
 # [signer.remote]
 # URL of the Web3Signer instance
@@ -169,13 +179,13 @@ validator_registration_batch_size = ""
 # server_name = "localhost-1"
 # Complete URL of a Dirk gateway
 # url = "https://localhost:8881"
-# Accounts to use as consensus keys
-# accounts = ["Wallet1/Account1", "DistributedWallet/Account1"]
+# Wallets to load consensus keys from
+# accounts = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
 # server_name = "localhost-2"
 # url = "https://localhost:8882"
-# accounts = ["Wallet2/Account2", "DistributedWallet/Account1"]
+# accounts = ["Wallet2", "DistributedWallet"]
 
 # Configuration for how the Signer module should store proxy delegations.
 # OPTIONAL

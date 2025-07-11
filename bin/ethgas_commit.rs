@@ -156,8 +156,7 @@ struct APIValidatorRegisterResponse {
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponseData {
-    available: bool,
-    message: Option<RegisteredInfo>,
+    message: Option<RegisteredInfo>
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,6 +174,7 @@ struct APIValidatorDeregisterResponseData {
 struct APIValidatorVerifyResponse {
     success: bool,
     data: APIValidatorVerifyResponseData,
+    errorMsgKey: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
@@ -405,20 +405,12 @@ impl EthgasCommitService {
             }
         }
 
-        exchange_api_url = Url::parse(&format!(
-            "{}{}{}{}{}",
-            self.config.extra.exchange_api_base,
-            "/api/v1/user/delegate/builder?enable=",
-            self.config.extra.enable_builder,
-            "&publicKey=",
-            self.config.extra.builder_pubkey
-        ))?;
-        res = client
-            .post(exchange_api_url.to_string())
-            .header("Authorization", format!("Bearer {}", self.access_jwt))
-            .header("content-type", "application/json")
-            .send()
-            .await?;
+        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKeys=", self.config.extra.builder_pubkey))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
         match res.json::<APIEnableBuilderResponse>().await {
             Ok(result) => match result.success {
                 true => {
@@ -749,7 +741,6 @@ impl EthgasCommitService {
                         .header("User-Agent", "cb_ethgas_commit")
                         .header("Authorization", format!("Bearer {}", access_jwt))
                         .header("content-type", "application/json")
-                        .query(&[("publicKey", pubkey.to_string())])
                         .send()
                         .await?;
                     match res.json::<APILoginVerifyResponse>().await {
@@ -767,12 +758,8 @@ impl EthgasCommitService {
                     }
                 }
                 if self.config.extra.enable_registration {
-                    exchange_api_url = Url::parse(&format!(
-                        "{}{}",
-                        self.config.extra.exchange_api_base, "/api/v1/validator/register"
-                    ))?;
-                    res = client
-                        .post(exchange_api_url.to_string())
+                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
+                    res = client.post(exchange_api_url.to_string())
                         .header("Authorization", format!("Bearer {}", access_jwt))
                         .header("content-type", "application/json")
                         .query(&[("publicKey", pubkey.to_string())])
@@ -819,7 +806,12 @@ impl EthgasCommitService {
                                                     info!("successful registration, you can now sell preconfs on ETHGas!");
                                                 }
                                             } else {
-                                                error!("failed to register");
+                                                let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
+                                                if err_msg == "error.validator.registered" {
+                                                    warn!("this pubkey has been registered already");
+                                                } else {
+                                                    error!("failed to register: {err_msg}");
+                                                }
                                             }
                                         }
                                         Err(e) => error!(
