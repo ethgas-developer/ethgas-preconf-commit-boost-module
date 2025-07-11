@@ -164,7 +164,8 @@ struct APIValidatorDeregisterResponseData {
 #[derive(Debug, Deserialize)]
 struct APIValidatorVerifyResponse {
     success: bool,
-    data: APIValidatorVerifyResponseData
+    data: APIValidatorVerifyResponseData,
+    errorMsgKey: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
@@ -646,7 +647,6 @@ impl EthgasCommitService {
                         .header("User-Agent", "cb_ethgas_commit")
                         .header("Authorization", format!("Bearer {}", access_jwt))
                         .header("content-type", "application/json")
-                        .query(&[("publicKey", pubkey.to_string())])
                         .send()
                         .await?;
                     match res.json::<APILoginVerifyResponse>().await {
@@ -704,7 +704,12 @@ impl EthgasCommitService {
                                                     info!("successful registration, you can now sell preconfs on ETHGas!");
                                                 }
                                             } else {
-                                                error!("failed to register");
+                                                let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
+                                                if err_msg == "error.validator.registered" {
+                                                    warn!("this pubkey has been registered already");
+                                                } else {
+                                                    error!("failed to register: {err_msg}");
+                                                }
                                             }
                                             
                                         },
