@@ -67,6 +67,9 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 # Headers to send with each request for this relay
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
+# GET parameters to add to each request URL for this relay
+# OPTIONAL
+# get_params = { param1 = "value1", param2 = "value2" }
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
 # These values should be carefully chosen for each relay, as each relay has different latency and timing games setups.
 # They should only be used by advanced users, and if mis-configured can result in unforeseen effects, e.g. fetching a lower header value,
@@ -177,6 +180,13 @@ frequency_get_header_ms = 100
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
 # docker_image = "ghcr.io/commit-boost/signer:latest"
+# Host to bind the Signer API server to
+# OPTIONAL, DEFAULT: 127.0.0.1
+host = "0.0.0.0"
+# Port to listen for Signer API calls on
+# OPTIONAL, DEFAULT: 20000
+port = 20000
+
 # For Remote signer:
 # [signer.remote]
 # URL of the Web3Signer instance
@@ -200,13 +210,13 @@ frequency_get_header_ms = 100
 # server_name = "localhost-1"
 # Complete URL of a Dirk gateway
 # url = "https://localhost:8881"
-# Accounts to use as consensus keys
-# accounts = ["Wallet1/Account1", "DistributedWallet/Account1"]
+# Wallets to load consensus keys from
+# accounts = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
 # server_name = "localhost-2"
 # url = "https://localhost:8882"
-# accounts = ["Wallet2/Account2", "DistributedWallet/Account1"]
+# accounts = ["Wallet2", "DistributedWallet"]
 
 # Configuration for how the Signer module should store proxy delegations.
 # OPTIONAL

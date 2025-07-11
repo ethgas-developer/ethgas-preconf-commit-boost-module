@@ -10,10 +10,10 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
 
 ## Config Setup
-* Copy one of the `config.example.xxx.toml` as `config.toml`
+* Copy one of the `config.example.<env>.toml` as `config.toml`
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
-* Do not use any other relay than the one listed in the `config.example.xxx.toml`, otherwise you will get slashed
+* Do not use any other relay than the one listed in the `config.example.<env>.toml`, otherwise you will get slashed
 * Registration of SSV validators can skip signer-related setup below
 * For local signer module, Commit Boost supports Lighthouse, Prysm, Teku and Lodestar's keystores. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)

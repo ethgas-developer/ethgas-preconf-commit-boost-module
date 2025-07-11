@@ -6,6 +6,7 @@ services:
     - 18550:18550
     environment:
       CB_CONFIG: /cb-config.toml
+      CB_PBS_ENDPOINT: 0.0.0.0:18550
       CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
     volumes:
@@ -29,7 +30,7 @@ services:
     container_name: cb_signer
     environment:
       CB_CONFIG: /cb-config.toml
-      CB_SIGNER_PORT: 20000
+      CB_SIGNER_ENDPOINT: 0.0.0.0:20000
       CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
       # either plain key file
