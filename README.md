@@ -44,7 +44,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Start the Signer module
 * For registration of non-SSV validators, run `docker-compose -f docker-compose.yml up cb_signer`
-    * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0-rc.2" commit_hash="0661f17257065b49b374384231b294b6b75dca2f" modules=["ETHGAS_COMMIT"] port=20000 loaded_consensus=100 loaded_proxies=0` where `loaded_consensus` indicates the total number of loaded keys
+    * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0" commit_hash="f51f5bd61831fde943057b29ffd6e26e7eb23765" modules=["ETHGAS_COMMIT"] endpoint=0.0.0.0:20000 loaded_consensus=100 loaded_proxies=0` where `loaded_consensus` indicates the total number of loaded keys
 
 ## Start the ETHGas Commit module
 * Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
