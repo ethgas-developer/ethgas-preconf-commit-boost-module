@@ -135,6 +135,22 @@ struct APILoginVerifyResponseData {
 }
 
 #[derive(Debug, Deserialize)]
+struct APIUserUpdateResponse {
+    success: bool,
+    data: APIUserUpdateResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserUpdateResponseData {
+    user: APIUserUpdateResponseDataUser
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserUpdateResponseDataUser {
+    displayName: String
+}
+
+#[derive(Debug, Deserialize)]
 struct AccessToken {
     token: String
 }
@@ -305,7 +321,6 @@ impl EthgasExchangeService {
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("chainId", self.chain_id.clone())])
-                .query(&[("name", self.entity_name.clone())])
                 .send()
                 .await?;
                 
@@ -336,6 +351,20 @@ impl EthgasExchangeService {
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
         info!("successfully obtained access jwt from the exchange");
+        exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/update"))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", res_json_verify.data.accessToken.token))
+                .query(&[("displayName", self.entity_name.clone())])
+                .send()
+                .await?;
+        match res.json::<APIUserUpdateResponse>().await {
+            Ok(res_json) => {
+                if res_json.data.user.displayName != self.entity_name.clone() {
+                    warn!("failed to set the user name")
+                }
+            },
+            Err(e) => warn!("failed to set the user name: {e}")
+        }
         Ok((res_json_verify.data.accessToken.token, refresh_jwt))
         // println!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
@@ -720,15 +749,16 @@ impl EthgasCommitService {
 
                                     match res.json::<APIValidatorVerifyBatchResponse>().await {
                                         Ok(res_json_verify) => {
-                                            if res_json_verify.success {
-                                                let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
-                                                    .filter_map(|(key, verify_result)| {
-                                                        if verify_result.result == 0 || verify_result.result == 3 {
-                                                            Some(key.clone())
-                                                        } else {
-                                                            None
-                                                        }
-                                                    }).collect();
+                                            let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
+                                                .filter_map(|(key, verify_result)| {
+                                                    if verify_result.result == 0 || verify_result.result == 3 {
+                                                        Some(key.clone())
+                                                    } else {
+                                                        error!("invalid signature");
+                                                        None
+                                                    }
+                                                }).collect();
+                                            if res_json_verify.success && registered_keys.len() > 0 {
                                                 if self.config.extra.enable_pricer {
                                                     info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
                                                 } else {
@@ -737,11 +767,7 @@ impl EthgasCommitService {
                                                 info!(number = registered_keys.len(), registered_validators = ?registered_keys);
                                             } else {
                                                 let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
-                                                if err_msg == "error.validator.registered" {
-                                                    warn!("this pubkey has been registered already");
-                                                } else {
-                                                    error!("failed to register: {err_msg}");
-                                                }
+                                                error!("failed to register: {err_msg}");
                                             }
                                             
                                         },
