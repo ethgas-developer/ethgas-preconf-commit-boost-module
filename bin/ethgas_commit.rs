@@ -1,6 +1,6 @@
 use commit_boost::prelude::*;
 use alloy::{
-    primitives::B256, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode
+    primitives::{B256, FixedBytes}, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -8,7 +8,7 @@ use prometheus::{IntCounter, Registry};
 use serde::{Deserialize, Serialize};
 use tracing::{error, info, warn};
 use std::{
-    time::Duration, error::Error, env, str::FromStr
+    time::Duration, error::Error, env, str::FromStr, collections::HashMap
 };
 use reqwest::{Client, Url};
 use tokio::time::sleep;
@@ -135,6 +135,22 @@ struct APILoginVerifyResponseData {
 }
 
 #[derive(Debug, Deserialize)]
+struct APIUserUpdateResponse {
+    success: bool,
+    data: APIUserUpdateResponseData
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserUpdateResponseData {
+    user: APIUserUpdateResponseDataUser
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserUpdateResponseDataUser {
+    displayName: String
+}
+
+#[derive(Debug, Deserialize)]
 struct AccessToken {
     token: String
 }
@@ -158,18 +174,21 @@ struct APIValidatorDeregisterResponse {
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorDeregisterResponseData {
-    message: Option<RegisteredInfo>
+    deleted: Vec<BlsPublicKey>
 }
 
 #[derive(Debug, Deserialize)]
-struct APIValidatorVerifyResponse {
+struct APIValidatorVerifyBatchResponse {
     success: bool,
-    data: APIValidatorVerifyResponseData,
+    data: HashMap<BlsPublicKey, ValidatorVerifyResult>,
     errorMsgKey: Option<String>
 }
 
 #[derive(Debug, Deserialize)]
-struct APIValidatorVerifyResponseData {}
+struct ValidatorVerifyResult {
+    result: u8,
+    description: String
+}
 
 #[derive(Debug, Deserialize)]
 struct APISsvNodeOperatorRegisterResponse {
@@ -302,7 +321,6 @@ impl EthgasExchangeService {
         let mut res = client.post(exchange_api_url.to_string())
                 .query(&[("addr", signer.clone().address())])
                 .query(&[("chainId", self.chain_id.clone())])
-                .query(&[("name", self.entity_name.clone())])
                 .send()
                 .await?;
                 
@@ -333,6 +351,20 @@ impl EthgasExchangeService {
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
         info!("successfully obtained access jwt from the exchange");
+        exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/update"))?;
+        res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", res_json_verify.data.accessToken.token))
+                .query(&[("displayName", self.entity_name.clone())])
+                .send()
+                .await?;
+        match res.json::<APIUserUpdateResponse>().await {
+            Ok(res_json) => {
+                if res_json.data.user.displayName != self.entity_name.clone() {
+                    warn!("failed to set the user name")
+                }
+            },
+            Err(e) => warn!("failed to set the user name: {e}")
+        }
         Ok((res_json_verify.data.accessToken.token, refresh_jwt))
         // println!("API Response as JSON: {}", res.json::<Value>().await?);
         // Ok(String::from("test"))
@@ -634,117 +666,157 @@ impl EthgasCommitService {
                 Vec::new()
             };
 
-            let api_wait_interval_in_ms = match self.config.extra.api_wait_interval_in_ms {
-                Some(wait_interval) => wait_interval,
-                None => 0
-            };
-            for i in 0..pubkeys.len() {
-                let pubkey = pubkeys[i];
-                info!(pubkey_counter = i, ?pubkey);
-                if i % 10000 == 0 && i != 0 {
-                    exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
-                    res = client.post(exchange_api_url.to_string())
-                        .header("User-Agent", "cb_ethgas_commit")
-                        .header("Authorization", format!("Bearer {}", access_jwt))
-                        .header("content-type", "application/json")
-                        .send()
-                        .await?;
-                    match res.json::<APILoginVerifyResponse>().await {
-                        Ok(res_json) => {
-                            if res_json.success {
-                                info!("successfully refreshed access jwt!");
-                                access_jwt = res_json.data.accessToken.token;
-                            } else {
-                                error!("failed to refresh access jwt");
-                            }
-                        },
-                        Err(err) => {
-                            error!(?err, "failed to call jwt refresh API");
-                        }
-                    }
-                }
-                if self.config.extra.enable_registration {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
-                    res = client.post(exchange_api_url.to_string())
-                        .header("Authorization", format!("Bearer {}", access_jwt))
-                        .header("content-type", "application/json")
-                        .query(&[("publicKey", pubkey.to_string())])
-                        .send()
-                        .await?;
-                    match res.json::<APIValidatorRegisterResponse>().await {
-                        Ok(res_json) => {
-                            match res_json.data.message {
-                                Some(api_validator_request_response_data_message) => {
+            exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
+            res = client.post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", access_jwt))
+                .header("content-type", "application/json")
+                .query(&[("publicKey", FixedBytes::<48>::from([0u8; 48]))])
+                .send()
+                .await?;
+            match res.json::<APIValidatorRegisterResponse>().await {
+                Ok(res_json) => {
+                    match res_json.data.message {
+                        Some(api_validator_request_response_data_message) => {
+
+                            let mut signatures = Vec::new();
+                            let api_wait_interval_in_ms = match self.config.extra.api_wait_interval_in_ms {
+                                Some(wait_interval) => wait_interval,
+                                None => 0
+                            };
+                            if self.config.extra.enable_registration {
+                                for i in 0..pubkeys.len() {
+                                    let pubkey = pubkeys[i];
+                                    info!("pubkey_counter={i} generating signature for pubkey={pubkey}");
                                     let info = RegisteredInfo {
                                         eoaAddress: api_validator_request_response_data_message.eoaAddress
                                     };
                                     let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
-                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/verify"))?;
-
                                     // Request the signature from the signer client
                                     let signature = self.config
                                         .signer_client
                                         .request_consensus_signature(request)
                                         .await?;
 
+                                    signatures.push(signature.to_string());
+                                
+                                }
+
+                                let mut counter = 0;
+                                for (pubkey_chunk, sig_chunk) in pubkeys.chunks(100).zip(signatures.chunks(100)) {
+                                    if counter % 1000 == 0 && counter != 0 {
+                                        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
+                                        res = client.post(exchange_api_url.to_string())
+                                            .header("User-Agent", "cb_ethgas_commit")
+                                            .header("Authorization", format!("Bearer {}", access_jwt))
+                                            .header("content-type", "application/json")
+                                            .send()
+                                            .await?;
+                                        match res.json::<APILoginVerifyResponse>().await {
+                                            Ok(res_json) => {
+                                                if res_json.success {
+                                                    info!("successfully refreshed access jwt!");
+                                                    access_jwt = res_json.data.accessToken.token;
+                                                } else {
+                                                    error!("failed to refresh access jwt");
+                                                }
+                                            },
+                                            Err(err) => {
+                                                error!(?err, "failed to call jwt refresh API");
+                                            }
+                                        }
+                                    }
+
+                                    let pubkeys_str = pubkey_chunk.iter()
+                                        .map(|key| key.to_string())
+                                        .collect::<Vec<String>>()
+                                        .join(",");
+
+                                    let signatures_str = sig_chunk.iter()
+                                        .map(|sig| sig.to_string())
+                                        .collect::<Vec<String>>()
+                                        .join(",");
+                                    
+                                    let mut form_data = HashMap::new();
+                                    form_data.insert("publicKeys", pubkeys_str);
+                                    form_data.insert("signatures", signatures_str);
+                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/verify/batch"))?;
                                     res = client.post(exchange_api_url.to_string())
                                         .header("Authorization", format!("Bearer {}", access_jwt))
-                                        .header("content-type", "application/json")
-                                        .query(&[("publicKey", pubkey.to_string())])
-                                        .query(&[("signature", signature.to_string())])
+                                        .header("content-type", "application/x-www-form-urlencoded")
+                                        .form(&form_data)
                                         .send()
                                         .await?;
 
-                                    match res.json::<APIValidatorVerifyResponse>().await {
+                                    match res.json::<APIValidatorVerifyBatchResponse>().await {
                                         Ok(res_json_verify) => {
-                                            if res_json_verify.success {
+                                            let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
+                                                .filter_map(|(key, verify_result)| {
+                                                    if verify_result.result == 0 || verify_result.result == 3 {
+                                                        Some(key.clone())
+                                                    } else {
+                                                        error!("invalid signature");
+                                                        None
+                                                    }
+                                                }).collect();
+                                            if res_json_verify.success && registered_keys.len() > 0 {
                                                 if self.config.extra.enable_pricer {
                                                     info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
                                                 } else {
                                                     info!("successful registration, you can now sell preconfs on ETHGas!");
                                                 }
+                                                info!(number = registered_keys.len(), registered_validators = ?registered_keys);
                                             } else {
                                                 let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
-                                                if err_msg == "error.validator.registered" {
-                                                    warn!("this pubkey has been registered already");
-                                                } else {
-                                                    error!("failed to register: {err_msg}");
-                                                }
+                                                error!("failed to register: {err_msg}");
                                             }
                                             
                                         },
                                         Err(e) => error!("Failed to parse validator verification response: {}", e)
                                     }
-                                },
-                                None => warn!("this pubkey has been registered already"),
-                            }
-                        },
-                        Err(err) => {
-                            error!(?err, "failed to call validator register API");
-                        }
-                    }
-                } else {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
-                    res = client.post(exchange_api_url.to_string())
-                        .header("Authorization", format!("Bearer {}", access_jwt))
-                        .header("content-type", "application/json")
-                        .query(&[("publicKeys", pubkey.to_string())])
-                        .send()
-                        .await?;
-                    match res.json::<APIValidatorDeregisterResponse>().await {
-                        Ok(res_json) => {
-                            if res_json.success {
-                                info!("successful deregistration!");
+                                    counter += 1;
+                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
+                                }
+                        
+                                
                             } else {
-                                error!("failed to deregister");
+                                for pubkey_chunk in pubkeys.chunks(100) {
+                                    let pubkeys_str = pubkey_chunk.iter()
+                                        .map(|key| key.to_string())
+                                        .collect::<Vec<String>>()
+                                        .join(",");
+
+                                    let mut form_data = HashMap::new();
+                                    form_data.insert("publicKeys", pubkeys_str);
+                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
+                                    res = client.post(exchange_api_url.to_string())
+                                        .header("Authorization", format!("Bearer {}", access_jwt))
+                                        .header("content-type", "application/x-www-form-urlencoded")
+                                        .form(&form_data)
+                                        .send()
+                                        .await?;
+                                    match res.json::<APIValidatorDeregisterResponse>().await {
+                                        Ok(res_json) => {
+                                            if res_json.success {
+                                                info!("successful deregistration!");
+                                                info!(number = res_json.data.deleted.len(), deregistered_validators = ?res_json.data.deleted);
+                                            } else {
+                                                error!("failed to deregister");
+                                            }
+                                        },
+                                        Err(err) => {
+                                            error!(?err, "failed to call validator deregister API");
+                                        }
+                                    }
+                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
+                                }
                             }
                         },
-                        Err(err) => {
-                            error!(?err, "failed to call validator deregister API");
-                        }
+                        None => error!("failed to get user EOA address from the exchange"),
                     }
+                },
+                Err(err) => {
+                    error!(?err, "failed to get user EOA address from the exchange");
                 }
-                sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
             }
         } else if self.config.extra.registration_mode == "skipped" {
             info!("skipped registration or deregistration");

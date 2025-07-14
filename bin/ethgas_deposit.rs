@@ -200,7 +200,6 @@ impl EthgasExchangeService {
                 .await?;
                 
         let res_json_login = res.json::<APILoginResponse>().await?;
-        info!(exchange_login_eip712_message = ?res_json_login);
         
         let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message)
             .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
