@@ -15,7 +15,6 @@ use tokio::time::sleep;
 use tokio_retry::{Retry, strategy::FixedInterval};
 use rust_decimal::Decimal;
 use cookie::Cookie;
-// use serde_json::Value;
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -366,8 +365,8 @@ impl EthgasExchangeService {
             Err(e) => warn!("failed to set the user name: {e}")
         }
         Ok((res_json_verify.data.accessToken.token, refresh_jwt))
-        // println!("API Response as JSON: {}", res.json::<Value>().await?);
-        // Ok(String::from("test"))
+        // println!("API Response as raw data: {}", res.text().await?);
+        // Ok((String::from("test"), String::from("test")))
     }
 }
 
