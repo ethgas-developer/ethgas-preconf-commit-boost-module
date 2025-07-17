@@ -176,10 +176,10 @@ frequency_get_header_ms = 100
 #   - Dirk: a remote Dirk instance
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module)
-# [signer]
+[signer]
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
-# docker_image = "ghcr.io/commit-boost/signer:latest"
+docker_image = "ghcr.io/commit-boost/signer:latest"
 # Host to bind the Signer API server to
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
@@ -211,12 +211,12 @@ port = 20000
 # Complete URL of a Dirk gateway
 # url = "https://localhost:8881"
 # Wallets to load consensus keys from
-# accounts = ["Wallet1", "DistributedWallet"]
+# wallets = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
 # server_name = "localhost-2"
 # url = "https://localhost:8882"
-# accounts = ["Wallet2", "DistributedWallet"]
+# wallets = ["Wallet2", "DistributedWallet"]
 
 # Configuration for how the Signer module should store proxy delegations.
 # OPTIONAL
