@@ -9,12 +9,13 @@ commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", re
 
 # ethereum
 alloy = { version = "0.12", features = [
-    "full",
-    "rpc-types-beacon",
-    "serde",
-    "ssz",
-    "getrandom",
-    "providers",
+  "full",
+  "rpc-types-beacon",
+  "serde",
+  "signer-keystore",
+  "ssz",
+  "getrandom",
+  "providers",
 ] }
 
 # networking
