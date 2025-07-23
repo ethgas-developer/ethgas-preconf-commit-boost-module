@@ -879,7 +879,7 @@ impl EthgasCommitService {
                                             let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
                                                 .filter_map(|(key, verify_result)| {
                                                     if verify_result.result == 0 {
-                                                        Some(key.clone())
+                                                        Some(*key)
                                                     } else {
                                                         None
                                                     }
@@ -887,7 +887,7 @@ impl EthgasCommitService {
                                             let previously_registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
                                                 .filter_map(|(key, verify_result)| {
                                                     if verify_result.result == 3 {
-                                                        Some(key.clone())
+                                                        Some(*key)
                                                     } else {
                                                         None
                                                     }
@@ -895,13 +895,13 @@ impl EthgasCommitService {
                                             let keys_with_invalid_signature: Vec<BlsPublicKey> = res_json_verify.data.iter()
                                                 .filter_map(|(key, verify_result)| {
                                                     if verify_result.result == 2 {
-                                                        Some(key.clone())
+                                                        Some(*key)
                                                     } else {
                                                         None
                                                     }
                                                 }).collect();
                                             if res_json_verify.success {
-                                                if registered_keys.len() > 0 {
+                                                if !registered_keys.is_empty() {
                                                     if self.config.extra.enable_pricer {
                                                         info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
                                                     } else {
@@ -909,10 +909,10 @@ impl EthgasCommitService {
                                                     }
                                                     info!(number = registered_keys.len(), registered_validators = ?registered_keys);
                                                 }
-                                                if previously_registered_keys.len() > 0 {
+                                                if !previously_registered_keys.is_empty() {
                                                     warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
                                                 }
-                                                if keys_with_invalid_signature.len() > 0 {
+                                                if !keys_with_invalid_signature.is_empty() {
                                                     error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
                                                 }
                                             } else {
