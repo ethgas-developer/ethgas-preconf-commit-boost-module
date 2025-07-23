@@ -750,20 +750,43 @@ impl EthgasCommitService {
                                         Ok(res_json_verify) => {
                                             let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
                                                 .filter_map(|(key, verify_result)| {
-                                                    if verify_result.result == 0 || verify_result.result == 3 {
+                                                    if verify_result.result == 0 {
                                                         Some(key.clone())
                                                     } else {
-                                                        error!("invalid signature");
                                                         None
                                                     }
                                                 }).collect();
-                                            if res_json_verify.success && registered_keys.len() > 0 {
-                                                if self.config.extra.enable_pricer {
-                                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
-                                                } else {
-                                                    info!("successful registration, you can now sell preconfs on ETHGas!");
+                                            let previously_registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
+                                                .filter_map(|(key, verify_result)| {
+                                                    if verify_result.result == 3 {
+                                                        Some(key.clone())
+                                                    } else {
+                                                        None
+                                                    }
+                                                }).collect();
+                                            let keys_with_invalid_signature: Vec<BlsPublicKey> = res_json_verify.data.iter()
+                                                .filter_map(|(key, verify_result)| {
+                                                    if verify_result.result == 2 {
+                                                        Some(key.clone())
+                                                    } else {
+                                                        None
+                                                    }
+                                                }).collect();
+                                            if res_json_verify.success {
+                                                if registered_keys.len() > 0 {
+                                                    if self.config.extra.enable_pricer {
+                                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                                    } else {
+                                                        info!("successful registration, you can now sell preconfs on ETHGas!");
+                                                    }
+                                                    info!(number = registered_keys.len(), registered_validators = ?registered_keys);
                                                 }
-                                                info!(number = registered_keys.len(), registered_validators = ?registered_keys);
+                                                if previously_registered_keys.len() > 0 {
+                                                    warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
+                                                }
+                                                if keys_with_invalid_signature.len() > 0 {
+                                                    error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
+                                                }
                                             } else {
                                                 let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
                                                 error!("failed to register: {err_msg}");
