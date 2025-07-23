@@ -1,20 +1,22 @@
-use commit_boost::prelude::*;
 use alloy::{
-    primitives::{B256, FixedBytes}, signers::{local::PrivateKeySigner, Signer}, sol, sol_types::{eip712_domain, SolStruct}, hex::encode
+    hex::encode,
+    primitives::{FixedBytes, B256},
+    signers::{local::PrivateKeySigner, Signer},
+    sol,
+    sol_types::{eip712_domain, SolStruct},
 };
+use commit_boost::prelude::*;
+use cookie::Cookie;
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
-use serde::{Deserialize, Serialize};
-use tracing::{error, info, warn};
-use std::{
-    time::Duration, error::Error, env, str::FromStr, collections::HashMap
-};
 use reqwest::{Client, Url};
-use tokio::time::sleep;
-use tokio_retry::{Retry, strategy::FixedInterval};
 use rust_decimal::Decimal;
-use cookie::Cookie;
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, env, error::Error, str::FromStr, time::Duration};
+use tokio::time::sleep;
+use tokio_retry::{strategy::FixedInterval, Retry};
+use tracing::{error, info, warn};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -22,14 +24,16 @@ lazy_static! {
     pub static ref MY_CUSTOM_REGISTRY: prometheus::Registry =
         Registry::new_custom(Some("ethgas_commit".to_string()), None)
             .expect("Failed to create metrics registry");
-    pub static ref SIG_RECEIVED_COUNTER: IntCounter =
-        IntCounter::new("signature_received", "successful signatures requests received")
-            .expect("Failed to create signature counter");
+    pub static ref SIG_RECEIVED_COUNTER: IntCounter = IntCounter::new(
+        "signature_received",
+        "successful signatures requests received"
+    )
+    .expect("Failed to create signature counter");
 }
 
 struct EthgasExchangeService {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility 
+    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     eoa_signing_key: B256,
 }
@@ -38,7 +42,7 @@ struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
     access_jwt: String,
     refresh_jwt: String,
-    mux_pubkeys: Vec<BlsPublicKey>
+    mux_pubkeys: Vec<BlsPublicKey>,
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -48,7 +52,7 @@ struct EthgasCommitService {
 #[derive(Debug, Deserialize)]
 struct ExtraConfig {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility 
+    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     overall_wait_interval_in_second: u32,
     api_wait_interval_in_ms: Option<u32>,
@@ -63,12 +67,13 @@ struct ExtraConfig {
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
-    ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>
+    ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct RegisteredInfo {
-    eoaAddress: alloy::primitives::Address,
+    eoa_address: alloy::primitives::Address,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -78,175 +83,188 @@ struct SigningData {
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Domain {
     name: String,
     version: String,
-    chainId: u64,
-    verifyingContract: alloy::primitives::Address
+    chain_id: u64,
+    verifying_contract: alloy::primitives::Address,
 }
 
 #[derive(Debug, Deserialize)]
 struct Message {
     hash: String,
     message: String,
-    domain: String
+    domain: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct Eip712Message {
     message: Message,
-    domain: Domain
+    domain: Domain,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct MessageSsv {
-    userId: String,
-    userAddress: String,
-    verifyType: String
+    user_id: String,
+    user_address: String,
+    verify_type: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct Eip712MessageSsv {
     message: MessageSsv,
-    domain: Domain
+    domain: Domain,
 }
 
 #[derive(Debug, Deserialize)]
 struct APILoginResponse {
     success: bool,
-    data: APILoginResponseData
+    data: APILoginResponseData,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APILoginResponseData {
-    eip712Message: String,
+    eip712_message: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct APILoginVerifyResponse {
     success: bool,
-    data: APILoginVerifyResponseData
+    data: APILoginVerifyResponseData,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APILoginVerifyResponseData {
-    accessToken: AccessToken
+    access_token: AccessToken,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIUserUpdateResponse {
     success: bool,
-    data: APIUserUpdateResponseData
+    data: APIUserUpdateResponseData,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIUserUpdateResponseData {
-    user: APIUserUpdateResponseDataUser
+    user: APIUserUpdateResponseDataUser,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APIUserUpdateResponseDataUser {
-    displayName: String
+    display_name: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct AccessToken {
-    token: String
+    token: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponse {
     success: bool,
-    data: APIValidatorRegisterResponseData
+    data: APIValidatorRegisterResponseData,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponseData {
-    message: Option<RegisteredInfo>
+    message: Option<RegisteredInfo>,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorDeregisterResponse {
     success: bool,
-    data: APIValidatorDeregisterResponseData
+    data: APIValidatorDeregisterResponseData,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorDeregisterResponseData {
-    deleted: Vec<BlsPublicKey>
+    deleted: Vec<BlsPublicKey>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APIValidatorVerifyBatchResponse {
     success: bool,
     data: HashMap<BlsPublicKey, ValidatorVerifyResult>,
-    errorMsgKey: Option<String>
+    error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 struct ValidatorVerifyResult {
     result: u8,
-    description: String
+    description: String,
 }
 
 #[derive(Debug, Deserialize)]
 struct APISsvNodeOperatorRegisterResponse {
     success: bool,
-    data: APISsvNodeOperatorRegisterResponseData
+    data: APISsvNodeOperatorRegisterResponseData,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APISsvNodeOperatorRegisterResponseData {
     available: bool,
-    messageToSign: Option<String>,
+    message_to_sign: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct APISsvNodeOperatorVerifyResponse {
     success: bool,
-    errorMsgKey: Option<String>
+    error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
-struct APISsvValidatorRegisterResponse  {
+#[serde(rename_all = "camelCase")]
+struct APISsvValidatorRegisterResponse {
     success: bool,
-    errorMsgKey: Option<String>,
-    data: APISsvValidatorRegisterResponseData
+    error_msg_key: Option<String>,
+    data: APISsvValidatorRegisterResponseData,
 }
 
 #[derive(Debug, Deserialize)]
 struct APISsvValidatorRegisterResponseData {
-    validators: Option<Vec<BlsPublicKey>>
+    validators: Option<Vec<BlsPublicKey>>,
 }
 
 #[derive(Debug, Deserialize)]
-struct APISsvValidatorDeregisterResponse  {
+#[serde(rename_all = "camelCase")]
+struct APISsvValidatorDeregisterResponse {
     success: bool,
-    errorMsgKey: Option<String>,
-    data: APISsvValidatorDeregisterResponseData
+    error_msg_key: Option<String>,
+    data: APISsvValidatorDeregisterResponseData,
 }
 
 #[derive(Debug, Deserialize)]
 struct APISsvValidatorDeregisterResponseData {
-    removed: Vec<BlsPublicKey>
+    removed: Vec<BlsPublicKey>,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIEnablePricerResponse {
-    success: bool
+    success: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct APIEnableBuilderResponse {
-    success: bool
+    success: bool,
 }
 
 #[derive(Debug, Deserialize)]
 struct APICollateralPerSlotResponse {
-    success: bool
+    success: bool,
 }
 
-async fn generate_eip712_signature(eip712_message_str: &str, signer: &PrivateKeySigner) -> Result<String> {
+async fn generate_eip712_signature(
+    eip712_message_str: &str,
+    signer: &PrivateKeySigner,
+) -> Result<String> {
     sol! {
         #[allow(missing_docs)]
         #[derive(Serialize)]
@@ -259,18 +277,18 @@ async fn generate_eip712_signature(eip712_message_str: &str, signer: &PrivateKey
 
     let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-    
+
     let domain = eip712_domain! {
         name: eip712_message.domain.name,
         version: eip712_message.domain.version,
-        chain_id: eip712_message.domain.chainId,
-        verifying_contract: eip712_message.domain.verifyingContract,
+        chain_id: eip712_message.domain.chain_id,
+        verifying_contract: eip712_message.domain.verifying_contract,
     };
 
     let message = data {
         hash: eip712_message.message.hash.clone(),
         message: eip712_message.message.message,
-        domain: eip712_message.message.domain
+        domain: eip712_message.message.domain,
     };
 
     let hash = message.eip712_signing_hash(&domain);
@@ -278,7 +296,10 @@ async fn generate_eip712_signature(eip712_message_str: &str, signer: &PrivateKey
     Ok(encode(signature.as_bytes()))
 }
 
-async fn generate_eip712_signature_for_ssv(eip712_message_str: &str, signer: &PrivateKeySigner) -> Result<String> {
+async fn generate_eip712_signature_for_ssv(
+    eip712_message_str: &str,
+    signer: &PrivateKeySigner,
+) -> Result<String> {
     sol! {
         #[allow(missing_docs)]
         #[derive(Serialize)]
@@ -291,18 +312,18 @@ async fn generate_eip712_signature_for_ssv(eip712_message_str: &str, signer: &Pr
 
     let eip712_message: Eip712MessageSsv = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-    
+
     let domain = eip712_domain! {
         name: eip712_message.domain.name,
         version: eip712_message.domain.version,
-        chain_id: eip712_message.domain.chainId,
-        verifying_contract: eip712_message.domain.verifyingContract,
+        chain_id: eip712_message.domain.chain_id,
+        verifying_contract: eip712_message.domain.verifying_contract,
     };
 
     let message = data {
-        userId: eip712_message.message.userId,
-        userAddress: eip712_message.message.userAddress,
-        verifyType: eip712_message.message.verifyType
+        userId: eip712_message.message.user_id,
+        userAddress: eip712_message.message.user_address,
+        verifyType: eip712_message.message.verify_type,
     };
 
     let hash = message.eip712_signing_hash(&domain);
@@ -316,26 +337,36 @@ impl EthgasExchangeService {
         let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
         info!("your EOA address: {}", signer.clone().address());
-        let mut exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login"))?;
-        let mut res = client.post(exchange_api_url.to_string())
-                .query(&[("addr", signer.clone().address())])
-                .query(&[("chainId", self.chain_id.clone())])
-                .send()
-                .await?;
-                
+        let mut exchange_api_url = Url::parse(&format!(
+            "{}{}",
+            self.exchange_api_base, "/api/v1/user/login"
+        ))?;
+        let mut res = client
+            .post(exchange_api_url.to_string())
+            .query(&[("addr", signer.clone().address())])
+            .query(&[("chainId", self.chain_id.clone())])
+            .send()
+            .await?;
+
         let res_json_login = res.json::<APILoginResponse>().await?;
-        
-        let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712Message)
-            .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-        let signature_hex = generate_eip712_signature(&res_json_login.data.eip712Message, &signer).await?;
-        exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/login/verify"))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("User-Agent", "cb_ethgas_commit")
-                .query(&[("addr", signer.clone().address())])
-                .query(&[("nonceHash", eip712_message.message.hash)])
-                .query(&[("signature", signature_hex)])
-                .send()
-                .await?;
+
+        let eip712_message: Eip712Message =
+            serde_json::from_str(&res_json_login.data.eip712_message)
+                .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+        let signature_hex =
+            generate_eip712_signature(&res_json_login.data.eip712_message, &signer).await?;
+        exchange_api_url = Url::parse(&format!(
+            "{}{}",
+            self.exchange_api_base, "/api/v1/user/login/verify"
+        ))?;
+        res = client
+            .post(exchange_api_url.to_string())
+            .header("User-Agent", "cb_ethgas_commit")
+            .query(&[("addr", signer.clone().address())])
+            .query(&[("nonceHash", eip712_message.message.hash)])
+            .query(&[("signature", signature_hex)])
+            .send()
+            .await?;
         let refresh_jwt: String;
         if let Some(set_cookie) = res.headers().get("Set-Cookie") {
             let cookie_str = set_cookie.to_str().expect("cannot parse cookie");
@@ -343,28 +374,34 @@ impl EthgasExchangeService {
             info!("successfully obtained refresh jwt from the exchange");
             refresh_jwt = cookie.value().to_string();
         } else {
-            return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                "Set-Cookie header not found").into());
+            return Err(std::io::Error::other("Set-Cookie header not found").into());
         }
         let res_text_login_verify = res.text().await?;
         let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
             .expect("Failed to parse login verification response");
         info!("successfully obtained access jwt from the exchange");
-        exchange_api_url = Url::parse(&format!("{}{}", self.exchange_api_base, "/api/v1/user/update"))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", res_json_verify.data.accessToken.token))
-                .query(&[("displayName", self.entity_name.clone())])
-                .send()
-                .await?;
+        exchange_api_url = Url::parse(&format!(
+            "{}{}",
+            self.exchange_api_base, "/api/v1/user/update"
+        ))?;
+        res = client
+            .post(exchange_api_url.to_string())
+            .header(
+                "Authorization",
+                format!("Bearer {}", res_json_verify.data.access_token.token),
+            )
+            .query(&[("displayName", self.entity_name.clone())])
+            .send()
+            .await?;
         match res.json::<APIUserUpdateResponse>().await {
             Ok(res_json) => {
-                if res_json.data.user.displayName != self.entity_name.clone() {
+                if res_json.data.user.display_name != self.entity_name.clone() {
                     warn!("failed to set the user name")
                 }
-            },
-            Err(e) => warn!("failed to set the user name: {e}")
+            }
+            Err(e) => warn!("failed to set the user name: {e}"),
         }
-        Ok((res_json_verify.data.accessToken.token, refresh_jwt))
+        Ok((res_json_verify.data.access_token.token, refresh_jwt))
         // println!("API Response as raw data: {}", res.text().await?);
         // Ok((String::from("test"), String::from("test")))
     }
@@ -374,28 +411,32 @@ impl EthgasCommitService {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let client = Client::new();
 
-        let mut exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/pricer?enable=", self.config.extra.enable_pricer))?;
-        let mut res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.access_jwt))
-                .header("content-type", "application/json")
-                .send()
-                .await?;
+        let mut exchange_api_url = Url::parse(&format!(
+            "{}{}{}",
+            self.config.extra.exchange_api_base,
+            "/api/v1/user/delegate/pricer?enable=",
+            self.config.extra.enable_pricer
+        ))?;
+        let mut res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", self.access_jwt))
+            .header("content-type", "application/json")
+            .send()
+            .await?;
         match res.json::<APIEnablePricerResponse>().await {
-            Ok(result) => {
-                match result.success {
-                    true => {
-                        if self.config.extra.enable_pricer == true {
-                            info!("successfully enabled pricer");
-                        } else {
-                            info!("successfully disabled pricer");
-                        }
-                    },
-                    false => {
-                        if self.config.extra.enable_pricer == true {
-                            error!("failed to enable pricer");
-                        } else {
-                            error!("failed to disable pricer");
-                        }
+            Ok(result) => match result.success {
+                true => {
+                    if self.config.extra.enable_pricer {
+                        info!("successfully enabled pricer");
+                    } else {
+                        info!("successfully disabled pricer");
+                    }
+                }
+                false => {
+                    if self.config.extra.enable_pricer {
+                        error!("failed to enable pricer");
+                    } else {
+                        error!("failed to disable pricer");
                     }
                 }
             },
@@ -404,28 +445,37 @@ impl EthgasCommitService {
             }
         }
 
-        exchange_api_url = Url::parse(&format!("{}{}{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/delegate/builder?enable=", self.config.extra.enable_builder, "&publicKeys=", self.config.extra.builder_pubkey))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", self.access_jwt))
-                .header("content-type", "application/json")
-                .send()
-                .await?;
+        exchange_api_url = Url::parse(&format!(
+            "{}{}{}{}{}",
+            self.config.extra.exchange_api_base,
+            "/api/v1/user/delegate/builder?enable=",
+            self.config.extra.enable_builder,
+            "&publicKeys=",
+            self.config.extra.builder_pubkey
+        ))?;
+        res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", self.access_jwt))
+            .header("content-type", "application/json")
+            .send()
+            .await?;
         match res.json::<APIEnableBuilderResponse>().await {
-            Ok(result) => {
-                match result.success {
-                    true => {
-                        if self.config.extra.enable_builder == true {
-                            info!("successfully delegated to builder {}", self.config.extra.builder_pubkey);
-                        } else {
-                            info!("successfully disabled builder delegation");
-                        }
-                    },
-                    false => {
-                        if self.config.extra.enable_builder == true {
-                            error!("failed to enable builder delegation");
-                        } else {
-                            error!("failed to disable builder delegation");
-                        }
+            Ok(result) => match result.success {
+                true => {
+                    if self.config.extra.enable_builder {
+                        info!(
+                            "successfully delegated to builder {}",
+                            self.config.extra.builder_pubkey
+                        );
+                    } else {
+                        info!("successfully disabled builder delegation");
+                    }
+                }
+                false => {
+                    if self.config.extra.enable_builder {
+                        error!("failed to enable builder delegation");
+                    } else {
+                        error!("failed to disable builder delegation");
                     }
                 }
             },
@@ -436,21 +486,28 @@ impl EthgasCommitService {
 
         let mut access_jwt = self.access_jwt.clone();
 
-        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/collateralPerSlot?collateralPerSlot=", self.config.extra.collateral_per_slot))?;
-        res = client.post(exchange_api_url.to_string())
-                .header("Authorization", format!("Bearer {}", access_jwt))
-                .header("content-type", "application/json")
-                .send()
-                .await?;
+        exchange_api_url = Url::parse(&format!(
+            "{}{}{}",
+            self.config.extra.exchange_api_base,
+            "/api/v1/user/collateralPerSlot?collateralPerSlot=",
+            self.config.extra.collateral_per_slot
+        ))?;
+        res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", access_jwt))
+            .header("content-type", "application/json")
+            .send()
+            .await?;
         match res.json::<APICollateralPerSlotResponse>().await {
-            Ok(result) => {
-                match result.success {
-                    true => {
-                        info!("successfully set collateral per slot to {} ETH", self.config.extra.collateral_per_slot);
-                    },
-                    false => {
-                        error!("failed to set collateral per slot");
-                    }
+            Ok(result) => match result.success {
+                true => {
+                    info!(
+                        "successfully set collateral per slot to {} ETH",
+                        self.config.extra.collateral_per_slot
+                    );
+                }
+                false => {
+                    error!("failed to set collateral per slot");
                 }
             },
             Err(err) => {
@@ -459,93 +516,125 @@ impl EthgasCommitService {
         }
 
         if self.config.extra.registration_mode == "ssv" {
-            let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
-                Some(signing_keys) => signing_keys.clone(),
-                None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
-                    Ok(signing_keys_str) => {
-                        signing_keys_str.split(',')
+            let ssv_node_operator_owner_signing_keys =
+                match &self.config.extra.ssv_node_operator_owner_signing_keys {
+                    Some(signing_keys) => signing_keys.clone(),
+                    None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
+                        Ok(signing_keys_str) => signing_keys_str
+                            .split(',')
                             .filter(|s| !s.trim().is_empty())
-                            .map(|key| B256::from_str(key.trim()).map_err(|_| {
-                                std::io::Error::new(std::io::ErrorKind::InvalidData, 
-                                    format!("Invalid signing key format"))
-                            }))
-                            .collect::<Result<Vec<B256>, _>>()?
+                            .map(|key| {
+                                B256::from_str(key.trim()).map_err(|_| {
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        "Invalid signing key format".to_string(),
+                                    )
+                                })
+                            })
+                            .collect::<Result<Vec<B256>, _>>()?,
+                        Err(_) => {
+                            return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_signing_keys cannot be empty",
+                            )
+                            .into());
+                        }
                     },
-                    Err(_) => {
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                            "ssv_node_operator_owner_signing_keys cannot be empty").into());
-                    }
-                }
-            };
+                };
             if ssv_node_operator_owner_signing_keys.is_empty() {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                    "ssv_node_operator_owner_signing_keys cannot be empty").into());
+                return Err(std::io::Error::other(
+                    "ssv_node_operator_owner_signing_keys cannot be empty",
+                )
+                .into());
             };
-            let ssv_node_operator_owner_validator_pubkeys = match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
-                Some(validator_pubkeys) => validator_pubkeys.clone(),
-                None => return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                    "ssv_node_operator_owner_validator_pubkeys cannot be empty").into())
-            };
-            if ssv_node_operator_owner_signing_keys.len() != ssv_node_operator_owner_validator_pubkeys.len() {
-                return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                    "ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
+            let ssv_node_operator_owner_validator_pubkeys =
+                match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
+                    Some(validator_pubkeys) => validator_pubkeys.clone(),
+                    None => {
+                        return Err(std::io::Error::other(
+                            "ssv_node_operator_owner_validator_pubkeys cannot be empty",
+                        )
+                        .into())
+                    }
+                };
+            if ssv_node_operator_owner_signing_keys.len()
+                != ssv_node_operator_owner_validator_pubkeys.len()
+            {
+                return Err(std::io::Error::other("ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
             }
 
             for i in 0..ssv_node_operator_owner_signing_keys.len() {
                 let signer = PrivateKeySigner::from_bytes(&ssv_node_operator_owner_signing_keys[i])
                     .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
                 let ssv_node_operator_owner_address = signer.clone().address();
-                info!("SSV node operator owner address: {}", ssv_node_operator_owner_address);
+                info!(
+                    "SSV node operator owner address: {}",
+                    ssv_node_operator_owner_address
+                );
 
-                exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/register"))?;
-                res = client.post(exchange_api_url.to_string())
+                exchange_api_url = Url::parse(&format!(
+                    "{}{}",
+                    self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/register"
+                ))?;
+                res = client
+                    .post(exchange_api_url.to_string())
                     .header("Authorization", format!("Bearer {}", access_jwt))
-                    .query(&[("ownerAddress", ssv_node_operator_owner_address)]) 
+                    .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                     .send()
                     .await?;
 
-                let res_json_ssv_node_operator_register = match res.json::<APISsvNodeOperatorRegisterResponse>().await {
-                    Ok(result) => {
-                        match result.success {
-                            true => {
-                                if result.data.available == false {
-                                    warn!("ssv node operator owner address has been registered");
-                                }
-                                result
-                            },
-                            false => {
-                                return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                    "failed to get the SSV node operator registration message for signing").into());
+                let res_json_ssv_node_operator_register = match res
+                    .json::<APISsvNodeOperatorRegisterResponse>()
+                    .await
+                {
+                    Ok(result) => match result.success {
+                        true => {
+                            if !result.data.available {
+                                warn!("ssv node operator owner address has been registered");
                             }
+                            result
+                        }
+                        false => {
+                            return Err(std::io::Error::other("failed to get the SSV node operator registration message for signing").into());
                         }
                     },
                     Err(err) => {
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                            format!("failed to call the API to get the SSV node operator registration message for signing: {}", err)).into());
+                        return Err(std::io::Error::other(format!("failed to call the API to get the SSV node operator registration message for signing: {}", err)).into());
                     }
                 };
                 if res_json_ssv_node_operator_register.data.available {
-                    let signature_hex = generate_eip712_signature_for_ssv(&res_json_ssv_node_operator_register.data.messageToSign.unwrap_or_default(), &signer).await?;
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verify"))?;
-                    res = client.post(exchange_api_url.to_string())
-                            .header("User-Agent", "cb_ethgas_commit")
-                            .header("Authorization", format!("Bearer {}", access_jwt))
-                            .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                            .query(&[("signature", signature_hex)])
-                            .query(&[("autoImport", false)])
-                            .query(&[("sync", false)])
-                            .send()
-                            .await?;
+                    let signature_hex = generate_eip712_signature_for_ssv(
+                        &res_json_ssv_node_operator_register
+                            .data
+                            .message_to_sign
+                            .unwrap_or_default(),
+                        &signer,
+                    )
+                    .await?;
+                    exchange_api_url = Url::parse(&format!(
+                        "{}{}",
+                        self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verify"
+                    ))?;
+                    res = client
+                        .post(exchange_api_url.to_string())
+                        .header("User-Agent", "cb_ethgas_commit")
+                        .header("Authorization", format!("Bearer {}", access_jwt))
+                        .query(&[("ownerAddress", ssv_node_operator_owner_address)])
+                        .query(&[("signature", signature_hex)])
+                        .query(&[("autoImport", false)])
+                        .query(&[("sync", false)])
+                        .send()
+                        .await?;
 
                     match res.json::<APISsvNodeOperatorVerifyResponse>().await {
-                        Ok(result) => {
-                            match result.success {
-                                true => {
-                                    info!("successfully registered ssv node operator owner address");
-                                },
-                                false => {
-                                    error!("failed to register ssv node operator owner address: {}", result.errorMsgKey.unwrap_or_default());
-                                }
+                        Ok(result) => match result.success {
+                            true => {
+                                info!("successfully registered ssv node operator owner address");
+                            }
+                            false => {
+                                error!(
+                                    "failed to register ssv node operator owner address: {}",
+                                    result.error_msg_key.unwrap_or_default()
+                                );
                             }
                         },
                         Err(err) => {
@@ -554,22 +643,29 @@ impl EthgasCommitService {
                     }
                 }
 
-                let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i].iter()
-                        .map(|key| key.to_string())
-                        .collect::<Vec<String>>()
-                        .join(",");
+                let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i]
+                    .iter()
+                    .map(|key| key.to_string())
+                    .collect::<Vec<String>>()
+                    .join(",");
                 if self.config.extra.enable_registration {
                     warn!("it may take up to 30 seconds to register all SSV validator pubkeys if there are many pubkeys");
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/register"))?;
+                    exchange_api_url = Url::parse(&format!(
+                        "{}{}",
+                        self.config.extra.exchange_api_base,
+                        "/api/v1/user/ssv/operator/validator/register"
+                    ))?;
                     res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
-                        client.post(exchange_api_url.to_string())
+                        client
+                            .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                             .send()
                             .await?
                     } else {
-                        client.post(exchange_api_url.to_string())
+                        client
+                            .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
@@ -585,7 +681,7 @@ impl EthgasCommitService {
                                     match result.data.validators.clone() {
                                         None => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
                                         Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
-                                        Some(vec) => {
+                                        Some(_) => {
                                             if self.config.extra.enable_pricer {
                                                 info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
                                             } else {
@@ -597,7 +693,7 @@ impl EthgasCommitService {
                                     }
                                 },
                                 false => {
-                                    error!("failed to register ssv validator pubkeys: {}", result.errorMsgKey.unwrap_or_default());
+                                    error!("failed to register ssv validator pubkeys: {}", result.error_msg_key.unwrap_or_default());
                                 }
                             }
                         },
@@ -606,16 +702,22 @@ impl EthgasCommitService {
                         }
                     }
                 } else {
-                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/validator/deregister"))?;
+                    exchange_api_url = Url::parse(&format!(
+                        "{}{}",
+                        self.config.extra.exchange_api_base,
+                        "/api/v1/user/ssv/operator/validator/deregister"
+                    ))?;
                     res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
-                        client.post(exchange_api_url.to_string())
+                        client
+                            .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                             .send()
                             .await?
                     } else {
-                        client.post(exchange_api_url.to_string())
+                        client
+                            .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
@@ -625,35 +727,38 @@ impl EthgasCommitService {
                     };
 
                     match res.json::<APISsvValidatorDeregisterResponse>().await {
-                        Ok(result) => {
-                            match result.success {
-                                true => {
-                                    if result.data.removed.is_empty() {
-                                        warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
-                                    } else {
-                                        info!("successful deregistration!");
-                                        info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
-                                    }
-                                },
-                                false => {
-                                    error!("failed to deregister ssv validator pubkeys: {}", result.errorMsgKey.unwrap_or_default());
+                        Ok(result) => match result.success {
+                            true => {
+                                if result.data.removed.is_empty() {
+                                    warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
+                                } else {
+                                    info!("successful deregistration!");
+                                    info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
                                 }
+                            }
+                            false => {
+                                error!(
+                                    "failed to deregister ssv validator pubkeys: {}",
+                                    result.error_msg_key.unwrap_or_default()
+                                );
                             }
                         },
                         Err(err) => {
                             error!(?err, "failed to call ssv validator deregister API");
                         }
                     }
-
                 }
-                
             }
-
-        } else if self.config.extra.registration_mode == "standard" || self.config.extra.registration_mode == "standard-mux" {
-
-            let pubkeys = if !self.mux_pubkeys.is_empty() && self.config.extra.registration_mode == "standard-mux" {
+        } else if self.config.extra.registration_mode == "standard"
+            || self.config.extra.registration_mode == "standard-mux"
+        {
+            let pubkeys = if !self.mux_pubkeys.is_empty()
+                && self.config.extra.registration_mode == "standard-mux"
+            {
                 self.mux_pubkeys.clone()
-            } else if self.mux_pubkeys.is_empty() && self.config.extra.registration_mode == "standard" {
+            } else if self.mux_pubkeys.is_empty()
+                && self.config.extra.registration_mode == "standard"
+            {
                 let client_pubkeys_response = self.config.signer_client.get_pubkeys().await?;
                 let mut client_pubkeys = Vec::new();
                 for proxy_map in client_pubkeys_response.keys {
@@ -665,8 +770,12 @@ impl EthgasCommitService {
                 Vec::new()
             };
 
-            exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/register"))?;
-            res = client.post(exchange_api_url.to_string())
+            exchange_api_url = Url::parse(&format!(
+                "{}{}",
+                self.config.extra.exchange_api_base, "/api/v1/validator/register"
+            ))?;
+            res = client
+                .post(exchange_api_url.to_string())
                 .header("Authorization", format!("Bearer {}", access_jwt))
                 .header("content-type", "application/json")
                 .query(&[("publicKey", FixedBytes::<48>::from([0u8; 48]))])
@@ -676,37 +785,49 @@ impl EthgasCommitService {
                 Ok(res_json) => {
                     match res_json.data.message {
                         Some(api_validator_request_response_data_message) => {
-
                             let mut signatures = Vec::new();
-                            let api_wait_interval_in_ms = match self.config.extra.api_wait_interval_in_ms {
-                                Some(wait_interval) => wait_interval,
-                                None => 0
-                            };
+                            let api_wait_interval_in_ms = self
+                                .config
+                                .extra
+                                .api_wait_interval_in_ms
+                                .unwrap_or_default();
                             if self.config.extra.enable_registration {
                                 for i in 0..pubkeys.len() {
                                     let pubkey = pubkeys[i];
                                     info!("pubkey_counter={i} generating signature for pubkey={pubkey}");
                                     let info = RegisteredInfo {
-                                        eoaAddress: api_validator_request_response_data_message.eoaAddress
+                                        eoa_address: api_validator_request_response_data_message
+                                            .eoa_address,
                                     };
-                                    let request = SignConsensusRequest::builder(pubkey).with_msg(&info);
+                                    let request =
+                                        SignConsensusRequest::builder(pubkey).with_msg(&info);
                                     // Request the signature from the signer client
-                                    let signature = self.config
+                                    let signature = self
+                                        .config
                                         .signer_client
                                         .request_consensus_signature(request)
                                         .await?;
 
                                     signatures.push(signature.to_string());
-                                
                                 }
 
-                                let mut counter = 0;
-                                for (pubkey_chunk, sig_chunk) in pubkeys.chunks(100).zip(signatures.chunks(100)) {
+                                for (counter, (pubkey_chunk, sig_chunk)) in
+                                    pubkeys.chunks(100).zip(signatures.chunks(100)).enumerate()
+                                {
                                     if counter % 1000 == 0 && counter != 0 {
-                                        exchange_api_url = Url::parse(&format!("{}{}{}", self.config.extra.exchange_api_base, "/api/v1/user/login/refresh?refreshToken=", self.refresh_jwt))?;
-                                        res = client.post(exchange_api_url.to_string())
+                                        exchange_api_url = Url::parse(&format!(
+                                            "{}{}{}",
+                                            self.config.extra.exchange_api_base,
+                                            "/api/v1/user/login/refresh?refreshToken=",
+                                            self.refresh_jwt
+                                        ))?;
+                                        res = client
+                                            .post(exchange_api_url.to_string())
                                             .header("User-Agent", "cb_ethgas_commit")
-                                            .header("Authorization", format!("Bearer {}", access_jwt))
+                                            .header(
+                                                "Authorization",
+                                                format!("Bearer {}", access_jwt),
+                                            )
                                             .header("content-type", "application/json")
                                             .send()
                                             .await?;
@@ -714,32 +835,39 @@ impl EthgasCommitService {
                                             Ok(res_json) => {
                                                 if res_json.success {
                                                     info!("successfully refreshed access jwt!");
-                                                    access_jwt = res_json.data.accessToken.token;
+                                                    access_jwt = res_json.data.access_token.token;
                                                 } else {
                                                     error!("failed to refresh access jwt");
                                                 }
-                                            },
+                                            }
                                             Err(err) => {
                                                 error!(?err, "failed to call jwt refresh API");
                                             }
                                         }
                                     }
 
-                                    let pubkeys_str = pubkey_chunk.iter()
+                                    let pubkeys_str = pubkey_chunk
+                                        .iter()
                                         .map(|key| key.to_string())
                                         .collect::<Vec<String>>()
                                         .join(",");
 
-                                    let signatures_str = sig_chunk.iter()
+                                    let signatures_str = sig_chunk
+                                        .iter()
                                         .map(|sig| sig.to_string())
                                         .collect::<Vec<String>>()
                                         .join(",");
-                                    
+
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str);
                                     form_data.insert("signatures", signatures_str);
-                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/verify/batch"))?;
-                                    res = client.post(exchange_api_url.to_string())
+                                    exchange_api_url = Url::parse(&format!(
+                                        "{}{}",
+                                        self.config.extra.exchange_api_base,
+                                        "/api/v1/validator/verify/batch"
+                                    ))?;
+                                    res = client
+                                        .post(exchange_api_url.to_string())
                                         .header("Authorization", format!("Bearer {}", access_jwt))
                                         .header("content-type", "application/x-www-form-urlencoded")
                                         .form(&form_data)
@@ -788,29 +916,37 @@ impl EthgasCommitService {
                                                     error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
                                                 }
                                             } else {
-                                                let err_msg = res_json_verify.errorMsgKey.unwrap_or_default();
+                                                let err_msg = res_json_verify
+                                                    .error_msg_key
+                                                    .unwrap_or_default();
                                                 error!("failed to register: {err_msg}");
                                             }
-                                            
-                                        },
-                                        Err(e) => error!("Failed to parse validator verification response: {}", e)
+                                        }
+                                        Err(e) => error!(
+                                            "Failed to parse validator verification response: {}",
+                                            e
+                                        ),
                                     }
-                                    counter += 1;
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
+                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
+                                        .await;
                                 }
-                        
-                                
                             } else {
                                 for pubkey_chunk in pubkeys.chunks(100) {
-                                    let pubkeys_str = pubkey_chunk.iter()
+                                    let pubkeys_str = pubkey_chunk
+                                        .iter()
                                         .map(|key| key.to_string())
                                         .collect::<Vec<String>>()
                                         .join(",");
 
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str);
-                                    exchange_api_url = Url::parse(&format!("{}{}", self.config.extra.exchange_api_base, "/api/v1/validator/deregister"))?;
-                                    res = client.post(exchange_api_url.to_string())
+                                    exchange_api_url = Url::parse(&format!(
+                                        "{}{}",
+                                        self.config.extra.exchange_api_base,
+                                        "/api/v1/validator/deregister"
+                                    ))?;
+                                    res = client
+                                        .post(exchange_api_url.to_string())
                                         .header("Authorization", format!("Bearer {}", access_jwt))
                                         .header("content-type", "application/x-www-form-urlencoded")
                                         .form(&form_data)
@@ -824,18 +960,19 @@ impl EthgasCommitService {
                                             } else {
                                                 error!("failed to deregister");
                                             }
-                                        },
+                                        }
                                         Err(err) => {
                                             error!(?err, "failed to call validator deregister API");
                                         }
                                     }
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into())).await;
+                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
+                                        .await;
                                 }
                             }
-                        },
+                        }
                         None => error!("failed to get user EOA address from the exchange"),
                     }
-                },
+                }
                 Err(err) => {
                     error!(?err, "failed to get user EOA address from the exchange");
                 }
@@ -859,7 +996,7 @@ async fn main() -> Result<()> {
 
     let _guard = initialize_tracing_log("ETHGAS_COMMIT", LogsSettings::from_env_config()?);
 
-    let mut overall_wait_interval_in_second: u32 = 0;
+    let mut overall_wait_interval_in_second: u32;
     let mut counter: u32 = 0;
 
     loop {
@@ -882,80 +1019,81 @@ async fn main() -> Result<()> {
                     Ok(config) => config,
                     Err(err) => {
                         error!("Failed to load pbs config: {err:?}");
-                        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Failed to load pbs config").into());
+                        return Err(std::io::Error::other("Failed to load pbs config").into());
                     }
                 };
 
-                let collateral_per_slot: Decimal = Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot != Decimal::new(0, 0) && (collateral_per_slot > Decimal::new(1000, 0) || collateral_per_slot < Decimal::new(1, 2) || collateral_per_slot.scale() > 2) {
+                let collateral_per_slot: Decimal =
+                    Decimal::from_str(&config.extra.collateral_per_slot)?;
+                if collateral_per_slot != Decimal::new(0, 0)
+                    && (collateral_per_slot > Decimal::new(1000, 0)
+                        || collateral_per_slot < Decimal::new(1, 2)
+                        || collateral_per_slot.scale() > 2)
+                {
                     error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other, "invalid collateral_per_slot").into());
+                    return Err(std::io::Error::other("invalid collateral_per_slot").into());
                 }
 
                 let access_jwt: String;
                 let refresh_jwt: String;
-                if config.extra.is_jwt_provided == false {
+                if !config.extra.is_jwt_provided {
                     let exchange_service = EthgasExchangeService {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
                         chain_id: config.extra.chain_id.clone(),
                         entity_name: config.extra.entity_name.clone(),
-                        eoa_signing_key: match config.extra.eoa_signing_key.clone() {
+                        eoa_signing_key: match config.extra.eoa_signing_key {
                             Some(eoa) => eoa,
-                            None => {
-                                match env::var("EOA_SIGNING_KEY") {
-                                    Ok(eoa) => {
-                                        B256::from_str(&eoa).map_err(|_| {
-                                            error!("Invalid EOA_SIGNING_KEY format"); 
-                                            std::io::Error::new(std::io::ErrorKind::InvalidData, "EOA_SIGNING_KEY format error")
-                                        })?
-                                    },
-                                    Err(_) => {
-                                        error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
-                                        return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                        "eoa_signing_key missing").into());
-                                    }
+                            None => match env::var("EOA_SIGNING_KEY") {
+                                Ok(eoa) => B256::from_str(&eoa).map_err(|_| {
+                                    error!("Invalid EOA_SIGNING_KEY format");
+                                    std::io::Error::new(
+                                        std::io::ErrorKind::InvalidData,
+                                        "EOA_SIGNING_KEY format error",
+                                    )
+                                })?,
+                                Err(_) => {
+                                    error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
+                                    return Err(
+                                        std::io::Error::other("eoa_signing_key missing").into()
+                                    );
                                 }
-                            }
-                        }
+                            },
+                        },
                     };
-                    (access_jwt, refresh_jwt) = Retry::spawn(FixedInterval::from_millis(500).take(5), || async { 
-                        let service = EthgasExchangeService {
-                            exchange_api_base: exchange_service.exchange_api_base.clone(),
-                            chain_id: exchange_service.chain_id.clone(),
-                            entity_name: exchange_service.entity_name.clone(),
-                            eoa_signing_key: exchange_service.eoa_signing_key.clone(),
-                        };
-                        service.login().await.map_err(|err| {
-                            error!(?err, "Service failed");
-                            err
+                    (access_jwt, refresh_jwt) =
+                        Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
+                            let service = EthgasExchangeService {
+                                exchange_api_base: exchange_service.exchange_api_base.clone(),
+                                chain_id: exchange_service.chain_id.clone(),
+                                entity_name: exchange_service.entity_name.clone(),
+                                eoa_signing_key: exchange_service.eoa_signing_key,
+                            };
+                            service.login().await.map_err(|err| {
+                                error!(?err, "Service failed");
+                                err
+                            })
                         })
-                    }).await?;
+                        .await?;
                 } else {
                     access_jwt = match config.extra.access_jwt.clone() {
                         Some(jwt) => jwt,
-                        None => {
-                            match env::var("ACCESS_JWT") {
-                                Ok(jwt) => jwt,
-                                Err(_) => {
-                                    error!("Config access_jwt is required. Please set ACCESS_JWT environment variable or provide it in the config file");
-                                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                    "access_jwt missing").into());
-                                }
+                        None => match env::var("ACCESS_JWT") {
+                            Ok(jwt) => jwt,
+                            Err(_) => {
+                                error!("Config access_jwt is required. Please set ACCESS_JWT environment variable or provide it in the config file");
+                                return Err(std::io::Error::other("access_jwt missing").into());
                             }
-                        }
+                        },
                     };
                     refresh_jwt = match config.extra.refresh_jwt.clone() {
                         Some(jwt) => jwt,
-                        None => {
-                            match env::var("REFRESH_JWT") {
-                                Ok(jwt) => jwt,
-                                Err(_) => {
-                                    error!("Config refresh_jwt is required. Please set REFRESH_JWT environment variable or provide it in the config file");
-                                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                                    "refresh_jwt missing").into());
-                                }
+                        None => match env::var("REFRESH_JWT") {
+                            Ok(jwt) => jwt,
+                            Err(_) => {
+                                error!("Config refresh_jwt is required. Please set REFRESH_JWT environment variable or provide it in the config file");
+                                return Err(std::io::Error::other("refresh_jwt missing").into());
                             }
-                        }
+                        },
                     };
                 }
 
@@ -971,21 +1109,23 @@ async fn main() -> Result<()> {
                             }
                         }
                         vec
-                    },
-                    None => Vec::new()
+                    }
+                    None => Vec::new(),
                 };
 
                 if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
-                    let mut commit_service = EthgasCommitService { config, access_jwt, refresh_jwt, mux_pubkeys };
+                    let mut commit_service = EthgasCommitService {
+                        config,
+                        access_jwt,
+                        refresh_jwt,
+                        mux_pubkeys,
+                    };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);
                     }
-                } else { 
-                    return Err(std::io::Error::new(std::io::ErrorKind::Other,
-                        "access_jwt or refresh_jwt missing").into());
+                } else {
+                    return Err(std::io::Error::other("access_jwt or refresh_jwt missing").into());
                 }
-
-
             }
             Err(err) => {
                 error!("Failed to load module config: {:?}", err);
@@ -995,8 +1135,14 @@ async fn main() -> Result<()> {
         if overall_wait_interval_in_second == 0 {
             break;
         }
-        info!("waiting for {} seconds to start again...", overall_wait_interval_in_second);
-        sleep(Duration::from_millis((overall_wait_interval_in_second as u64) * 1000)).await;
+        info!(
+            "waiting for {} seconds to start again...",
+            overall_wait_interval_in_second
+        );
+        sleep(Duration::from_millis(
+            (overall_wait_interval_in_second as u64) * 1000,
+        ))
+        .await;
         counter += 1;
     }
     Ok(())
