@@ -3,6 +3,8 @@
 .cb.env
 keys.json
 mux_keys.json
+keystore*.json
+password1*.txt
 config.toml
 config.holesky.toml
 config.mainnet.toml

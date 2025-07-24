@@ -13,7 +13,7 @@ use prometheus::{IntCounter, Registry};
 use reqwest::{Client, Url};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, error::Error, str::FromStr, time::Duration};
+use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, time::Duration};
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
@@ -66,8 +66,16 @@ struct ExtraConfig {
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
+    ssv_node_operator_owner_mode: Option<String>,
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
+    ssv_node_operator_owner_keystores: Option<Vec<SsvKeystoreConfig>>,
     ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SsvKeystoreConfig {
+    keystore_path: PathBuf,
+    password_path: PathBuf,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -516,55 +524,133 @@ impl EthgasCommitService {
         }
 
         if self.config.extra.registration_mode == "ssv" {
-            let ssv_node_operator_owner_signing_keys =
-                match &self.config.extra.ssv_node_operator_owner_signing_keys {
-                    Some(signing_keys) => signing_keys.clone(),
-                    None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
-                        Ok(signing_keys_str) => signing_keys_str
-                            .split(',')
-                            .filter(|s| !s.trim().is_empty())
-                            .map(|key| {
-                                B256::from_str(key.trim()).map_err(|_| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::InvalidData,
-                                        "Invalid signing key format".to_string(),
+            let ssv_node_operator_owner_validator_pubkeys = match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
+                Some(validator_pubkeys) => validator_pubkeys.clone(),
+                None => {
+                    return Err(std::io::Error::other(
+                        "ssv_node_operator_owner_validator_pubkeys cannot be empty",
+                    )
+                    .into())
+                }
+            };
+            let ssv_node_operator_signers: Vec<PrivateKeySigner> = match &self.config.extra.ssv_node_operator_owner_mode {
+                Some(mode) => match mode.as_str() {
+                    "key" => {
+                        let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
+                            Some(signing_keys) => signing_keys.clone(),
+                            None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
+                                Ok(signing_keys_str) => signing_keys_str
+                                    .split(',')
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(|key| {
+                                        B256::from_str(key.trim()).map_err(|_| {
+                                            std::io::Error::new(
+                                                std::io::ErrorKind::InvalidData,
+                                                "Invalid signing key format".to_string(),
+                                            )
+                                        })
+                                    })
+                                    .collect::<Result<Vec<B256>, _>>()?,
+                                Err(_) => {
+                                    return Err(std::io::Error::other(
+                                        "ssv_node_operator_owner_signing_keys cannot be empty",
                                     )
-                                })
-                            })
-                            .collect::<Result<Vec<B256>, _>>()?,
-                        Err(_) => {
-                            return Err(std::io::Error::other(
-                                "ssv_node_operator_owner_signing_keys cannot be empty",
+                                    .into());
+                                }
+                            },
+                        };
+                        if ssv_node_operator_owner_signing_keys.is_empty() {
+                                return Err(std::io::Error::other(
+                                    "ssv_node_operator_owner_signing_keys cannot be empty",
                             )
                             .into());
-                        }
-                    },
-                };
-            if ssv_node_operator_owner_signing_keys.is_empty() {
-                return Err(std::io::Error::other(
-                    "ssv_node_operator_owner_signing_keys cannot be empty",
-                )
-                .into());
-            };
-            let ssv_node_operator_owner_validator_pubkeys =
-                match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
-                    Some(validator_pubkeys) => validator_pubkeys.clone(),
-                    None => {
-                        return Err(std::io::Error::other(
-                            "ssv_node_operator_owner_validator_pubkeys cannot be empty",
-                        )
-                        .into())
+                        };
+                        let ssv_node_operator_signers: Result<Vec<PrivateKeySigner>, _> = ssv_node_operator_owner_signing_keys
+                            .iter()
+                            .map(|key_bytes| {
+                                PrivateKeySigner::from_bytes(key_bytes)
+                                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))
+                            })
+                            .collect();
+
+                        let ssv_node_operator_signers = ssv_node_operator_signers
+                            .map_err(|e| eyre::eyre!("Failed to create signers: {}", e))?;
+                        ssv_node_operator_signers
+
                     }
-                };
-            if ssv_node_operator_owner_signing_keys.len()
-                != ssv_node_operator_owner_validator_pubkeys.len()
-            {
+                    "keystore" => {
+                        let ssv_node_operator_signers: Result<Vec<PrivateKeySigner>, _> = match &self
+                            .config
+                            .extra
+                            .ssv_node_operator_owner_keystores
+                        {
+                            Some(keystores) => keystores
+                                .iter()
+                                .map(|keystore| {
+                                    let password = std::fs::read_to_string(&keystore.password_path)?;
+                                    PrivateKeySigner::decrypt_keystore(&keystore.keystore_path, password.trim())
+                                })
+                                .collect(),
+                            None => {
+                                let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORES");
+                                let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSOWRDS");
+
+                                match (keystore_paths, password_paths) {
+                                    (Ok(keystore_paths), Ok(password_paths)) => {
+                                        let keystore_paths = keystore_paths
+                                            .split(',')
+                                            .filter(|s| !s.trim().is_empty())
+                                            .collect::<Vec<_>>();
+                                        let password_paths = password_paths
+                                            .split(',')
+                                            .filter(|s| !s.trim().is_empty())
+                                            .collect::<Vec<_>>();
+
+                                        if keystore_paths.len() != password_paths.len() {
+                                            return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORES & SSV_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                        }
+
+                                        keystore_paths
+                                            .into_iter()
+                                            .zip(password_paths)
+                                            .map(|(keystore_path, password_path)| {
+                                                let password = std::fs::read_to_string(password_path)?;
+                                                PrivateKeySigner::decrypt_keystore(
+                                                    keystore_path,
+                                                    password.trim(),
+                                                )
+                                            })
+                                            .collect()
+                                    }
+                                    _ => {
+                                        return Err(std::io::Error::other(
+                                            "ssv_node_operator_owner_keystores cannot be empty",
+                                        )
+                                        .into());
+                                    }
+                                }
+                            }
+                        };
+                        let ssv_node_operator_signers = ssv_node_operator_signers
+                            .map_err(|e| eyre::eyre!("Failed to create signers: {}", e))?;
+                        ssv_node_operator_signers
+
+                    }
+                    _ => {
+                        return Err(std::io::Error::other("Unsupported ssv_node_operator_owner_mode").into());
+                    }
+                }
+                None => {
+                    return Err(std::io::Error::other("ssv_node_operator_owner_mode cannot be empty").into());
+                }
+            };
+
+            if ssv_node_operator_signers.len() != ssv_node_operator_owner_validator_pubkeys.len() {
                 return Err(std::io::Error::other("ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
             }
 
-            for i in 0..ssv_node_operator_owner_signing_keys.len() {
-                let signer = PrivateKeySigner::from_bytes(&ssv_node_operator_owner_signing_keys[i])
-                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+            for i in 0..ssv_node_operator_signers.len() {
+                let signer = &ssv_node_operator_signers[i];
                 let ssv_node_operator_owner_address = signer.clone().address();
                 info!(
                     "SSV node operator owner address: {}",
