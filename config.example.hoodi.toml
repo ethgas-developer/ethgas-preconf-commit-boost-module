@@ -252,7 +252,7 @@ eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_pro
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 # below configs are only for ssv validators
-# ssv_node_operator_owner_mode = "key" # key, keystore
+# ssv_node_operator_owner_mode = "key" # key, keystore, ledger
 # ssv_node_operator_owner_signing_keys = [
 #     "0x...",
 #     "0x...",
@@ -266,6 +266,9 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     { keystore_path = "/path/to/keystore3.json", password_path = "/path/to/password3.txt" }
 # ]
 # Alternatively, you can set SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS=/path/to/keystore1.json,/path/to/keystore2.json,/path/to/keystore3.json and SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS=/path/to/password1.txt,/path/to/password2.txt,/path/to/password3.txt in .cb.env as env variables
+# ssv_node_operator_owner_ledger_paths = [
+#     "m/44'/60'/0'/0"
+# ]
 # ssv_node_operator_owner_validator_pubkeys = [
 #     [], # this will trigger the registration of all associated BLS pubkeys obtained from SSV API
 #     [ "0x...", "0x..." ],

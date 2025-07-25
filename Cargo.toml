@@ -16,11 +16,13 @@ alloy = { version = "0.12", features = [
   "ssz",
   "getrandom",
   "providers",
+  "signer-ledger",
+  "eip712"
 ] }
 
 # networking
 axum = { version = "0.8.1", features = ["macros"] }
-reqwest = { version = "0.12.4", features = ["json", "stream"] }
+reqwest = { version = "0.12.0", features = ["json", "stream"] }
 
 # async / threads
 tokio = { version = "1.37.0", features = ["full"] }
@@ -42,6 +44,7 @@ tree_hash = "0.9"
 tree_hash_derive = "0.9"
 
 # misc
+js-sys = "0.3.72"
 color-eyre = "0.6.3"
 eyre = "0.6.12"
 rand = { version = "0.9", features = ["os_rng"] }

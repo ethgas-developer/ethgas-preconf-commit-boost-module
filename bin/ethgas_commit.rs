@@ -1,9 +1,9 @@
 use alloy::{
     hex::encode,
-    primitives::{FixedBytes, B256},
-    signers::{local::PrivateKeySigner, Signer},
+    primitives::{FixedBytes, B256, PrimitiveSignature},
+    signers::{local::PrivateKeySigner, Signer, ledger::{HDPath, LedgerSigner}, Error as SignerError},
     sol,
-    sol_types::{eip712_domain, SolStruct},
+    sol_types::{eip712_domain, Eip712Domain, SolStruct},
 };
 use commit_boost::prelude::*;
 use cookie::Cookie;
@@ -69,6 +69,7 @@ struct ExtraConfig {
     ssv_node_operator_owner_mode: Option<String>,
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
     ssv_node_operator_owner_keystores: Option<Vec<SsvKeystoreConfig>>,
+    ssv_node_operator_owner_ledger_paths: Option<Vec<String>>,
     ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
 }
 
@@ -304,19 +305,40 @@ async fn generate_eip712_signature(
     Ok(encode(signature.as_bytes()))
 }
 
-async fn generate_eip712_signature_for_ssv(
-    eip712_message_str: &str,
-    signer: &PrivateKeySigner,
-) -> Result<String> {
-    sol! {
-        #[allow(missing_docs)]
-        #[derive(Serialize)]
-        struct data {
-            string userId;
-            string userAddress;
-            string verifyType;
+sol! {
+    #[allow(missing_docs)]
+    #[derive(Serialize)]
+    struct data {
+        string userId;
+        string userAddress;
+        string verifyType;
+    }
+}
+enum SSVSigner {
+    PrivateKey(PrivateKeySigner),
+    Ledger(LedgerSigner),
+}
+
+impl SSVSigner {
+    pub fn address(&self) -> alloy::primitives::Address {
+        match self {
+            SSVSigner::Ledger(signer) => signer.address(),
+            SSVSigner::PrivateKey(signer) => signer.address(),
         }
     }
+
+    pub async fn sign_typed_data(&self, message: &data, domain: &Eip712Domain) -> Result<PrimitiveSignature, SignerError> {
+        match self {
+            SSVSigner::Ledger(signer) => signer.sign_typed_data(message, domain).await,
+            SSVSigner::PrivateKey(signer) => signer.sign_typed_data(message, domain).await,
+        }
+    }
+}
+
+async fn generate_eip712_signature_for_ssv(
+    eip712_message_str: &str,
+    signer: &SSVSigner,
+) -> Result<String> {
 
     let eip712_message: Eip712MessageSsv = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
@@ -334,8 +356,9 @@ async fn generate_eip712_signature_for_ssv(
         verifyType: eip712_message.message.verify_type,
     };
 
-    let hash = message.eip712_signing_hash(&domain);
-    let signature = signer.sign_hash(&hash).await?;
+    // let hash = message.eip712_signing_hash(&domain);
+    // let signature = signer.sign_hash(&hash).await?;
+    let signature = signer.sign_typed_data(&message, &domain).await?;
     Ok(encode(signature.as_bytes()))
 }
 
@@ -533,7 +556,7 @@ impl EthgasCommitService {
                     .into())
                 }
             };
-            let ssv_node_operator_signers: Vec<PrivateKeySigner> = match &self.config.extra.ssv_node_operator_owner_mode {
+            let ssv_node_operator_signers: Vec<SSVSigner> = match &self.config.extra.ssv_node_operator_owner_mode {
                 Some(mode) => match mode.as_str() {
                     "key" => {
                         let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
@@ -565,32 +588,32 @@ impl EthgasCommitService {
                             )
                             .into());
                         };
-                        let ssv_node_operator_signers: Result<Vec<PrivateKeySigner>, _> = ssv_node_operator_owner_signing_keys
-                            .iter()
-                            .map(|key_bytes| {
-                                PrivateKeySigner::from_bytes(key_bytes)
-                                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))
-                            })
-                            .collect();
 
-                        let ssv_node_operator_signers = ssv_node_operator_signers
-                            .map_err(|e| eyre::eyre!("Failed to create signers: {}", e))?;
-                        ssv_node_operator_signers
-
+                        let mut operator_signers = Vec::new();
+                        for key_byte in ssv_node_operator_owner_signing_keys {
+                            let signer = PrivateKeySigner::from_bytes(&key_byte)
+                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                        }
+                        operator_signers
                     }
                     "keystore" => {
-                        let ssv_node_operator_signers: Result<Vec<PrivateKeySigner>, _> = match &self
+                        let operator_signers: Vec<SSVSigner> = match &self
                             .config
                             .extra
                             .ssv_node_operator_owner_keystores
                         {
-                            Some(keystores) => keystores
-                                .iter()
-                                .map(|keystore| {
+                            Some(keystores) => {
+                                let mut operator_signers = Vec::new();
+                                for keystore in keystores {
                                     let password = std::fs::read_to_string(&keystore.password_path)?;
-                                    PrivateKeySigner::decrypt_keystore(&keystore.keystore_path, password.trim())
-                                })
-                                .collect(),
+                                    let signer = PrivateKeySigner::decrypt_keystore(&keystore.keystore_path, password.trim())
+                                        .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                                    operator_signers.push(SSVSigner::PrivateKey(signer));
+                                }
+                                operator_signers
+
+                            }
                             None => {
                                 let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORES");
                                 let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSOWRDS");
@@ -610,17 +633,15 @@ impl EthgasCommitService {
                                             return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORES & SSV_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
                                         }
 
-                                        keystore_paths
-                                            .into_iter()
-                                            .zip(password_paths)
-                                            .map(|(keystore_path, password_path)| {
-                                                let password = std::fs::read_to_string(password_path)?;
-                                                PrivateKeySigner::decrypt_keystore(
-                                                    keystore_path,
-                                                    password.trim(),
-                                                )
-                                            })
-                                            .collect()
+                                        let mut operator_signers = Vec::new();
+                                        for (keystore_path, password_path) in keystore_paths.iter().zip(password_paths.iter()) {
+                                            let password = std::fs::read_to_string(password_path)?;
+                                            let signer = PrivateKeySigner::decrypt_keystore(keystore_path, password.trim())
+                                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                                        }
+                                        operator_signers
+
                                     }
                                     _ => {
                                         return Err(std::io::Error::other(
@@ -631,10 +652,30 @@ impl EthgasCommitService {
                                 }
                             }
                         };
-                        let ssv_node_operator_signers = ssv_node_operator_signers
-                            .map_err(|e| eyre::eyre!("Failed to create signers: {}", e))?;
-                        ssv_node_operator_signers
+                        operator_signers
 
+                    }
+                    "ledger" => {
+                        let ssv_node_operator_owner_ledger_paths = match &self.config.extra.ssv_node_operator_owner_ledger_paths {
+                            Some(paths) => paths.clone(),
+                            None => return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_ledger_paths cannot be empty",
+                            )
+                            .into()),
+                        };
+                        if ssv_node_operator_owner_ledger_paths.len() != 1 {
+                            return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_ledger_paths cannot be empty or more than 1 path",
+                            )
+                            .into());
+                        };
+
+                        let mut operator_signers = Vec::new();
+                        for path in ssv_node_operator_owner_ledger_paths {
+                            let signer = LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
+                            operator_signers.push(SSVSigner::Ledger(signer));
+                        }
+                        operator_signers
                     }
                     _ => {
                         return Err(std::io::Error::other("Unsupported ssv_node_operator_owner_mode").into());
@@ -650,8 +691,8 @@ impl EthgasCommitService {
             }
 
             for i in 0..ssv_node_operator_signers.len() {
-                let signer = &ssv_node_operator_signers[i];
-                let ssv_node_operator_owner_address = signer.clone().address();
+                let signer = ssv_node_operator_signers.get(i).unwrap();
+                let ssv_node_operator_owner_address = signer.address();
                 info!(
                     "SSV node operator owner address: {}",
                     ssv_node_operator_owner_address
@@ -693,7 +734,7 @@ impl EthgasCommitService {
                             .data
                             .message_to_sign
                             .unwrap_or_default(),
-                        &signer,
+                        signer,
                     )
                     .await?;
                     exchange_api_url = Url::parse(&format!(
