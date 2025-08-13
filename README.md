@@ -30,7 +30,11 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
             * Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS` as an env variable in `.cb.env`
         * For the `keystore` mode, set keystore configurations under `ssv_node_operator_owner_keystores` array where each entry contains both `keystore_path` and `password_path`
             * Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS` and `SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS` as env variables in `.cb.env`
-        * For the `ledger` mode, only set one path in `ssv_node_operator_owner_ledger_paths` array 
+        * For the `ledger` mode, only set one derivation path in `ssv_node_operator_owner_ledger_paths` array 
+            * if you are using Linux, identify the correct ledger device path and add `devices` section under `cb_ethgas_commit` service of `docker-compose.yml`
+            * if you are using Mac, you can only run the program in native rust as Docker cannot support native ledger connection in Mac
+                * export all env variables of `.cb.env` in the terminal
+                * run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
         * specify validator public keys under `ssv_node_operator_owner_validator_pubkeys` or set it as `[]` to indicate the registration of all associated validator public keys obtained via SSV official API
         * if node operators within a cluster are associated with different owner addresses which are all owned by you, please put all signing keys of those owner addresses under the `ssv_node_operator_owner_signing_keys` array. This can ensure our exchange will open markets for your ssv validators even when the leading node operator rotates within the cluster.
     * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to our API doc [this part](https://developers.ethgas.com/?http#post-api-v1-user-login) and [this part](https://developers.ethgas.com/?http#post-api-v1-user-login-refresh) to get access & refresh jwt and set `is_jwt_provided = true` and `access_jwt` & `refresh_jwt` in `config.toml` 
