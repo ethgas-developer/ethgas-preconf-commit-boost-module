@@ -1,0 +1,63 @@
+use eyre::Result;
+use reqwest::{Client, Url};
+use std::{collections::HashMap, error::Error};
+use tracing::{error, info};
+use serde::Deserialize;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct APIValidatorUpdateOfacResponse {
+    pub success: bool,
+    pub error_msg_key: Option<String>,
+}
+
+pub async fn update_ofac(
+    client: &Client,
+    exchange_api_url: Url,
+    access_jwt: &str,
+    enable_ofac: bool,
+    pubkeys_str: String,
+) -> Result<(), Box<dyn Error>> {
+    let mut form_data = HashMap::new();
+    if !pubkeys_str.is_empty() {
+        form_data.insert("publicKeys", pubkeys_str);
+    }
+    form_data.insert("isOfac", enable_ofac.to_string());
+
+    let res = client
+        .post(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .header("content-type", "application/x-www-form-urlencoded")
+        .form(&form_data)
+        .send()
+        .await?;
+
+    match res.json::<APIValidatorUpdateOfacResponse>().await {
+        Ok(res_json) => {
+            if res_json.success {
+                if enable_ofac {
+                    info!("successfully enabled ofac");
+                } else {
+                    info!("successfully disabled ofac");
+                }
+            } else {
+                if enable_ofac {
+                    error!(
+                        "failed to enable ofac: {}",
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
+                } else {
+                    error!(
+                        "failed to disable ofac: {}",
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
+                }
+            }
+        }
+        Err(err) => {
+            error!(?err, "Failed to call update ofac API");
+        }
+    }
+
+    Ok(())
+}

@@ -274,6 +274,7 @@ registration_mode = "standard" # standard, standard-mux, ssv, skipped
 enable_registration = true
 enable_pricer = true
 enable_builder = false
+enable_ofac = false
 collateral_per_slot = "0"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false

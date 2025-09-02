@@ -54,6 +54,10 @@ rust_decimal = "1.37"
 chrono = "0.4.40"
 cookie = "0.18"
 
+[lib]
+name = "ethgas_commit"
+path = "src/lib.rs"
+
 [[bin]]
 name = "gen_jwt"
 path = "bin/gen_jwt.rs"
