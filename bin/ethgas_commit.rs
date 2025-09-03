@@ -34,7 +34,6 @@ lazy_static! {
 
 struct EthgasExchangeService {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     eoa_signing_key: B256,
 }
@@ -53,10 +52,8 @@ struct EthgasCommitService {
 #[derive(Debug, Deserialize)]
 struct ExtraConfig {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     overall_wait_interval_in_second: u32,
-    api_wait_interval_in_ms: Option<u32>,
     enable_pricer: bool,
     registration_mode: String,
     enable_registration: bool,
@@ -377,7 +374,6 @@ impl EthgasExchangeService {
         let mut res = client
             .post(exchange_api_url.to_string())
             .query(&[("addr", signer.clone().address())])
-            .query(&[("chainId", self.chain_id.clone())])
             .send()
             .await?;
 
@@ -929,11 +925,6 @@ impl EthgasCommitService {
                     match res_json.data.message {
                         Some(api_validator_request_response_data_message) => {
                             let mut signatures = Vec::new();
-                            let api_wait_interval_in_ms = self
-                                .config
-                                .extra
-                                .api_wait_interval_in_ms
-                                .unwrap_or_default();
                             if self.config.extra.enable_registration {
                                 if pubkeys.len() != 0 {
                                     info!("generating signatures for pubkeys...");
@@ -1085,8 +1076,6 @@ impl EthgasCommitService {
                                             e
                                         ),
                                     }
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
-                                        .await;
                                 }
                             } else {
                                 for pubkey_chunk in pubkeys.chunks(100) {
@@ -1123,8 +1112,6 @@ impl EthgasCommitService {
                                             error!(?err, "failed to call validator deregister API");
                                         }
                                     }
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
-                                        .await;
                                 }
                             }
                         }
@@ -1197,7 +1184,6 @@ async fn main() -> Result<()> {
                 if !config.extra.is_jwt_provided {
                     let exchange_service = EthgasExchangeService {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
-                        chain_id: config.extra.chain_id.clone(),
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signing_key: match config.extra.eoa_signing_key {
                             Some(eoa) => eoa,
@@ -1222,7 +1208,6 @@ async fn main() -> Result<()> {
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
                             let service = EthgasExchangeService {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
-                                chain_id: exchange_service.chain_id.clone(),
                                 entity_name: exchange_service.entity_name.clone(),
                                 eoa_signing_key: exchange_service.eoa_signing_key,
                             };
