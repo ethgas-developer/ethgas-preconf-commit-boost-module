@@ -948,6 +948,7 @@ impl EthgasCommitService {
                                     signatures.push(signature.to_string());
                                 }
 
+                                let mut newly_registered_key_num = 0;
                                 for (counter, (pubkey_chunk, sig_chunk)) in
                                     pubkeys.chunks(100).zip(signatures.chunks(100)).enumerate()
                                 {
@@ -1045,6 +1046,7 @@ impl EthgasCommitService {
                                                         info!("successful registration, you can now sell preconfs on ETHGas");
                                                     }
                                                     info!(number = registered_keys.len(), registered_validators = ?registered_keys);
+                                                    newly_registered_key_num += registered_keys.len();
                                                 }
                                                 if !previously_registered_keys.is_empty() {
                                                     warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
@@ -1078,7 +1080,9 @@ impl EthgasCommitService {
                                         ),
                                     }
                                 }
+                                info!(?newly_registered_key_num);
                             } else {
+                                let mut deregistered_key_num = 0;
                                 for pubkey_chunk in pubkeys.chunks(100) {
                                     let pubkeys_str = pubkey_chunk
                                         .iter()
@@ -1105,6 +1109,7 @@ impl EthgasCommitService {
                                             if res_json.success {
                                                 info!("successful deregistration");
                                                 info!(number = res_json.data.deleted.len(), deregistered_validators = ?res_json.data.deleted);
+                                                deregistered_key_num += res_json.data.deleted.len();
                                             } else {
                                                 error!("failed to deregister");
                                             }
@@ -1114,6 +1119,7 @@ impl EthgasCommitService {
                                         }
                                     }
                                 }
+                                info!(?deregistered_key_num);
                             }
                         }
                         None => error!("failed to get user EOA address from the exchange"),
