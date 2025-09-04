@@ -4,6 +4,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * `cb_signer`: It securely generates signatures from the validator BLS private keys
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 ![Architecture](./architecture.png)
+* For more details on ETHGas architecture, please refer to [here](https://docs.ethgas.com/our-technology/the-ethgas-architecture)
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
@@ -94,7 +95,10 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 * Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
 ## Audit
-* The module has been audited by [Sigma Prime](https://github.com/ethgas-developer/ethgas-audit)
+* The module has been audited by [Sigma Prime](https://sigmaprime.io/). Find the report [here](https://github.com/ethgas-developer/ethgas-audit)
+
+## Acknowledgements
+* [Commit-Boost](https://github.com/Commit-Boost/commit-boost-client)
 
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)
