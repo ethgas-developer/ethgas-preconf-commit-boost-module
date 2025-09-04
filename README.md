@@ -44,6 +44,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set `enable_ofac = true` if your validators only accept ofac-compliant blocks. This is a pubkey-specific setting so you could specify list of pubkeys in `[[mux]].validator_pubkeys` or `ssv_node_operator_owner_validator_pubkeys`.
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
     * `overall_wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
+    * set `query_pubkey = true` if you want to query all your validator pubkeys regardless of standard or ssv type that have been registered on the ETHGas Exchange
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * For non-SSV validators, set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section

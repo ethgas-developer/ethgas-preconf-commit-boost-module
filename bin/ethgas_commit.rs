@@ -17,7 +17,7 @@ use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, 
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
-use ethgas_commit::ofac::update_ofac;
+use ethgas_commit::{ofac::update_ofac, query_pubkey::{get_registered_standard_pubkeys, get_registered_ssv_pubkeys}};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -62,6 +62,7 @@ struct ExtraConfig {
     collateral_per_slot: String,
     builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
+    query_pubkey: bool,
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
@@ -1126,6 +1127,21 @@ impl EthgasCommitService {
             info!("skipped registration or deregistration");
         } else {
             error!("invalid registration mode");
+        }
+
+        if self.config.extra.query_pubkey {
+            info!("querying all your registered pubkeys...");
+            get_registered_standard_pubkeys(
+                &client,
+                self.config.extra.exchange_api_base.clone(),
+                &access_jwt
+            ).await?;
+
+            get_registered_ssv_pubkeys(
+                &client,
+                self.config.extra.exchange_api_base.clone(),
+                &access_jwt
+            ).await?;
         }
 
         Ok(())
