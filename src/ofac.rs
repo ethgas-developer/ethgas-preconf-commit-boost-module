@@ -13,7 +13,8 @@ pub struct APIValidatorUpdateOfacResponse {
 
 pub async fn update_ofac(
     client: &Client,
-    exchange_api_url: Url,
+    registration_mode: &str,
+    exchange_api_base: &str,
     access_jwt: &str,
     enable_ofac: bool,
     pubkeys_str: String,
@@ -22,7 +23,18 @@ pub async fn update_ofac(
     if !pubkeys_str.is_empty() {
         form_data.insert("publicKeys", pubkeys_str);
     }
-    form_data.insert("isOfac", enable_ofac.to_string());
+    form_data.insert("ofac", enable_ofac.to_string());
+    let api_endpoint: &str;
+    if registration_mode == "ssv" {
+        api_endpoint = "/api/v1/user/ssv/operator/validator/update/ofac";
+    } else {
+        api_endpoint = "/api/v1/validator/update/ofac";
+    }
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base,
+        api_endpoint
+    ))?;
 
     let res = client
         .post(exchange_api_url.to_string())

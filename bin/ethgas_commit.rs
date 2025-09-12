@@ -17,7 +17,7 @@ use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, 
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
-use ethgas_commit::{ofac::update_ofac, query_pubkey::{get_registered_standard_pubkeys, get_registered_ssv_pubkeys}};
+use ethgas_commit::{ofac::update_ofac, query_pubkey::{get_registered_all_pubkeys, get_registered_ssv_pubkeys}};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -817,14 +817,10 @@ impl EthgasCommitService {
                                             let result_data_validators = result.data.validators.unwrap_or_default();
                                             info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
 
-                                            exchange_api_url = Url::parse(&format!(
-                                                "{}{}",
-                                                self.config.extra.exchange_api_base,
-                                                "/api/v1/user/ssv/operator/validator/update/ofac"
-                                            ))?;
                                             update_ofac(
                                                 &client,
-                                                exchange_api_url,
+                                                &self.config.extra.registration_mode,
+                                                &self.config.extra.exchange_api_base,
                                                 &access_jwt,
                                                 self.config.extra.enable_ofac,
                                                 pubkeys_str_list,
@@ -1055,14 +1051,10 @@ impl EthgasCommitService {
                                                     error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
                                                 }
 
-                                                exchange_api_url = Url::parse(&format!(
-                                                    "{}{}",
-                                                    self.config.extra.exchange_api_base,
-                                                    "/api/v1/validator/update/ofac"
-                                                ))?;
                                                 update_ofac(
                                                     &client,
-                                                    exchange_api_url,
+                                                    &self.config.extra.registration_mode,
+                                                    &self.config.extra.exchange_api_base,
                                                     &access_jwt,
                                                     self.config.extra.enable_ofac,
                                                     pubkeys_str,
@@ -1137,7 +1129,7 @@ impl EthgasCommitService {
 
         if self.config.extra.query_pubkey {
             info!("querying all your registered pubkeys...");
-            get_registered_standard_pubkeys(
+            get_registered_all_pubkeys(
                 &client,
                 self.config.extra.exchange_api_base.clone(),
                 &access_jwt

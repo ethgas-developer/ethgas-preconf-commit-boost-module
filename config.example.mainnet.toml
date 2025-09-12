@@ -277,7 +277,7 @@ enable_ofac = false
 collateral_per_slot = "0"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
-query_pubkey = false
+query_pubkey = true
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false

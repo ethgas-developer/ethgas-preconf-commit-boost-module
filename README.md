@@ -1,7 +1,7 @@
 ## Overview
 First and foremost, we would like to give a big shout out to the Commit-Boost team for making Ethereum a more open and cooperative environment! This repo allows you to run all Commit-Boost components related to ETHGas in Docker. There are 3 main components, i.e.
 * `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
-* `cb_signer`: It securely generates signatures from the validator BLS private keys
+* `cb_signer`: It securely generates signatures from the validator BLS private keys. If you want to onboard SSV validators, you don't need this component.
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 ![Architecture](./architecture.png)
 * For more details on ETHGas architecture, please refer to [here](https://docs.ethgas.com/our-technology/the-ethgas-architecture)
@@ -66,6 +66,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
+* You are advised to stop MEV-Boost and immediately start the PBS module once the ETHGas Commit module has completed the registration process.
 
 ## Deposit ETH to our collateral contract
 * You can either deposit ETH/WETH via our [website](https://app.ethgas.com/my-portfolio/accounts), docker or direct contract interaction. After deposit, please transfer ETH from current account to trading account
@@ -102,5 +103,6 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)
+* [ETHGas API Doc](https://developers.ethgas.com/)
 * [ETHGas X / Twitter](https://x.com/ETHGASofficial)
 * [Commit-Boost Doc](https://commit-boost.github.io/commit-boost-client/)

@@ -6,14 +6,16 @@ use serde::Deserialize;
 use chrono::Local;
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct APIGetValidatorsResponse {
     pub success: bool,
     pub data: APIGetValidatorsResponseData,
+    pub error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct APIGetValidatorsResponseData {
-    pub validators: Vec<APIGetValidatorsResponseDataValidators>,
+    pub validators: Option<Vec<APIGetValidatorsResponseDataValidators>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -51,7 +53,7 @@ pub struct APIGetSsvOperatorValidatorsResponseData {
     pub validators: Vec<String>,
 }
 
-pub async fn get_registered_standard_pubkeys(
+pub async fn get_registered_all_pubkeys(
     client: &Client,
     exchange_api_base: String,
     access_jwt: &str,
@@ -71,16 +73,15 @@ pub async fn get_registered_standard_pubkeys(
     match res.json::<APIGetValidatorsResponse>().await {
         Ok(res_json) => {
             if res_json.success {
-                if res_json.data.validators.len() > 0 {
-                    let pubkeys: Vec<String> = res_json
-                        .data
-                        .validators
+                let validators = res_json.data.validators.unwrap_or_default();
+                if validators.len() > 0 {
+                    let pubkeys: Vec<String> = validators
                         .into_iter()
                         .map(|v| v.public_key)
                         .collect();
                     let now = Local::now();
                     let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
-                    let filename = format!("registered_standard_pubkeys_{}.txt", timestamp);
+                    let filename = format!("registered_all_pubkeys_{}.txt", timestamp);
                     let mut file = File::create(&filename)?;
                     for key in pubkeys {
                         writeln!(file, "{}", key)?;
@@ -88,8 +89,13 @@ pub async fn get_registered_standard_pubkeys(
 
                     info!("Records are saved in {}", filename);
                 } else {
-                    warn!("No registered standard pubkeys can be found");
+                    warn!("No registered pubkeys can be found");
                 }
+            } else {
+                error!(
+                    "Failed to get validators: {}",
+                    res_json.error_msg_key.unwrap_or_default()
+                );
             }
         }
         Err(err) => {
