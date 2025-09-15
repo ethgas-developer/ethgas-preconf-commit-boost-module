@@ -26,7 +26,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set `registration_mode` to be either `standard` for the most typical validators, `ssv` for SSV validators or `skipped` to skip registration
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * When `registration_mode = standard`, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. To enable PBS multiplexer, set `registration_mode = standard-mux` and `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
-    * for SSV validators, set `ssv_node_operator_owner_mode` to be either `key`, `keystore` or `ledger`
+    * for SSV validators, you need to prove your ownership to any one of the SSV node operator. 
+        * set `ssv_node_operator_owner_mode` to be either `key`, `keystore` or `ledger`
         * For the `key` mode, set one or multiple private keys under `ssv_node_operator_owner_signing_keys` array 
             * Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS` as an env variable in `.cb.env`
         * For the `keystore` mode, set keystore configurations under `ssv_node_operator_owner_keystores` array where each entry contains both `keystore_path` and `password_path`
