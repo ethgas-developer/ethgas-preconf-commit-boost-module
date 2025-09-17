@@ -1,9 +1,10 @@
 ## Overview
 First and foremost, we would like to give a big shout out to the Commit-Boost team for making Ethereum a more open and cooperative environment! This repo allows you to run all Commit-Boost components related to ETHGas in Docker. There are 3 main components, i.e.
 * `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
-* `cb_signer`: It securely generates signatures from the validator BLS private keys
+* `cb_signer`: It securely generates signatures from the validator BLS private keys. If you want to onboard SSV validators, you don't need this component.
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 ![Architecture](./architecture.png)
+* For more details on ETHGas architecture, please refer to [here](https://docs.ethgas.com/our-technology/the-ethgas-architecture)
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
@@ -25,7 +26,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set `registration_mode` to be either `standard` for the most typical validators, `ssv` for SSV validators or `skipped` to skip registration
     * set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
     * When `registration_mode = standard`, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. To enable PBS multiplexer, set `registration_mode = standard-mux` and `[[mux]]` section with `id` under `[[mux.relays]]` contains `ethgas` wording in the config, then only those `validator_pubkeys` will be registered.
-    * for SSV validators, set `ssv_node_operator_owner_mode` to be either `key`, `keystore` or `ledger`
+    * for SSV validators, you need to prove your ownership to any one of the SSV node operator. 
+        * set `ssv_node_operator_owner_mode` to be either `key`, `keystore` or `ledger`
         * For the `key` mode, set one or multiple private keys under `ssv_node_operator_owner_signing_keys` array 
             * Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS` as an env variable in `.cb.env`
         * For the `keystore` mode, set keystore configurations under `ssv_node_operator_owner_keystores` array where each entry contains both `keystore_path` and `password_path`
@@ -37,13 +39,15 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
                 * run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
         * specify validator public keys under `ssv_node_operator_owner_validator_pubkeys` or set it as `[]` to indicate the registration of all associated validator public keys obtained via SSV official API
         * if node operators within a cluster are associated with different owner addresses which are all owned by you, please put all signing keys of those owner addresses under the `ssv_node_operator_owner_signing_keys` array. This can ensure our exchange will open markets for your ssv validators even when the leading node operator rotates within the cluster.
-    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to our API doc [this part](https://developers.ethgas.com/?http#post-api-v1-user-login) and [this part](https://developers.ethgas.com/?http#post-api-v1-user-login-refresh) to get access & refresh jwt and set `is_jwt_provided = true` and `access_jwt` & `refresh_jwt` in `config.toml` 
+    * since your EOA address is required to be registered in ETHGas Exchange by generating a EIP712 signature first, then your validator public key can be binded to your EOA address by generating a BLS signature. You will need to either set `is_jwt_provided = false` and `eoa_signing_key` in `config.toml` or you can refer to our API doc [this part](https://developers.ethgas.com/?http#post-api-v1-user-login) and [this part](https://developers.ethgas.com/?http#post-api-v1-user-login-refresh) to get access & refresh jwt and set `is_jwt_provided = true` and `access_jwt` & `refresh_jwt` in `config.toml`
+        * if you are a node operator with validators from multiple pools, please use a different `eoa_signing_key` for validators from different pools.
         * Alternatively, you can set `EOA_SIGNING_KEY` or `ACCESS_JWT` & `REFRESH_JWT` as env variables in `.cb.env`
     * set `enable_pricer = true` if you want to delegate to our default pricer to help you to sell preconfs
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
+    * set `enable_ofac = true` if your validators only accept ofac-compliant blocks. This is a pubkey-specific setting so you could specify list of pubkeys in `[[mux]].validator_pubkeys` or `ssv_node_operator_owner_validator_pubkeys`.
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
     * `overall_wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
-    * `api_wait_interval_in_ms` indicates the waiting time in millisecond before sending the next validator registration request
+    * set `query_pubkey = true` if you want to query all your validator pubkeys regardless of standard or ssv type that have been registered on the ETHGas Exchange
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
 * For non-SSV validators, set validator BLS key directory or file in `docker-compose.yml`
     * under `cb_signer` section
@@ -64,6 +68,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
+* You are advised to stop MEV-Boost and immediately start the PBS module once the ETHGas Commit module has completed the registration process.
 
 ## Deposit ETH to our collateral contract
 * You can either deposit ETH/WETH via our [website](https://app.ethgas.com/my-portfolio/accounts), docker or direct contract interaction. After deposit, please transfer ETH from current account to trading account
@@ -93,9 +98,13 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 * Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
 ## Audit
-* The module has been audited by [Sigma Prime](https://github.com/ethgas-developer/ethgas-audit)
+* The module has been audited by [Sigma Prime](https://sigmaprime.io/). Find the report [here](https://github.com/ethgas-developer/ethgas-audit)
+
+## Acknowledgements
+* [Commit-Boost](https://github.com/Commit-Boost/commit-boost-client)
 
 ## If you need help...
 * [ETHGas Doc](https://docs.ethgas.com/)
+* [ETHGas API Doc](https://developers.ethgas.com/)
 * [ETHGas X / Twitter](https://x.com/ETHGASofficial)
 * [Commit-Boost Doc](https://commit-boost.github.io/commit-boost-client/)

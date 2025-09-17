@@ -5,6 +5,7 @@ keys.json
 mux_keys.json
 keystore*.json
 password1*.txt
+registered_*.txt
 config.toml
 config.holesky.toml
 config.mainnet.toml

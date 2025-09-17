@@ -17,6 +17,7 @@ use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, 
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
+use ethgas_commit::{ofac::update_ofac, query_pubkey::{get_registered_all_pubkeys, get_registered_ssv_pubkeys}};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -33,7 +34,6 @@ lazy_static! {
 
 struct EthgasExchangeService {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     eoa_signing_key: B256,
 }
@@ -52,17 +52,17 @@ struct EthgasCommitService {
 #[derive(Debug, Deserialize)]
 struct ExtraConfig {
     exchange_api_base: String,
-    chain_id: Option<String>, // not required, only for backward compatibility
     entity_name: String,
     overall_wait_interval_in_second: u32,
-    api_wait_interval_in_ms: Option<u32>,
     enable_pricer: bool,
     registration_mode: String,
     enable_registration: bool,
     enable_builder: bool,
+    enable_ofac: bool,
     collateral_per_slot: String,
     builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
+    query_pubkey: bool,
     eoa_signing_key: Option<B256>,
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
@@ -375,7 +375,6 @@ impl EthgasExchangeService {
         let mut res = client
             .post(exchange_api_url.to_string())
             .query(&[("addr", signer.clone().address())])
-            .query(&[("chainId", self.chain_id.clone())])
             .send()
             .await?;
 
@@ -433,6 +432,7 @@ impl EthgasExchangeService {
             Err(e) => warn!("failed to set the user name: {e}"),
         }
         Ok((res_json_verify.data.access_token.token, refresh_jwt))
+        // println!("API status: {}", res.status());
         // println!("API Response as raw data: {}", res.text().await?);
         // Ok((String::from("test"), String::from("test")))
     }
@@ -796,7 +796,7 @@ impl EthgasCommitService {
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                            .query(&[("publicKeys", pubkeys_str_list)])
+                            .query(&[("publicKeys", pubkeys_str_list.clone())])
                             .send()
                             .await?
                     };
@@ -810,12 +810,21 @@ impl EthgasCommitService {
                                         Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
                                         Some(_) => {
                                             if self.config.extra.enable_pricer {
-                                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
                                             } else {
-                                                info!("successful registration, you can now sell preconfs on ETHGas!");
+                                                info!("successful registration, you can now sell preconfs on ETHGas");
                                             }
                                             let result_data_validators = result.data.validators.unwrap_or_default();
                                             info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
+
+                                            update_ofac(
+                                                &client,
+                                                &self.config.extra.registration_mode,
+                                                &self.config.extra.exchange_api_base,
+                                                &access_jwt,
+                                                self.config.extra.enable_ofac,
+                                                pubkeys_str_list,
+                                            ).await?;
                                         }
                                     }
                                 },
@@ -859,7 +868,7 @@ impl EthgasCommitService {
                                 if result.data.removed.is_empty() {
                                     warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
                                 } else {
-                                    info!("successful deregistration!");
+                                    info!("successful deregistration");
                                     info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
                                 }
                             }
@@ -913,15 +922,12 @@ impl EthgasCommitService {
                     match res_json.data.message {
                         Some(api_validator_request_response_data_message) => {
                             let mut signatures = Vec::new();
-                            let api_wait_interval_in_ms = self
-                                .config
-                                .extra
-                                .api_wait_interval_in_ms
-                                .unwrap_or_default();
                             if self.config.extra.enable_registration {
+                                if pubkeys.len() != 0 {
+                                    info!("generating signatures for pubkeys...");
+                                }
                                 for i in 0..pubkeys.len() {
                                     let pubkey = pubkeys[i];
-                                    info!("pubkey_counter={i} generating signature for pubkey={pubkey}");
                                     let info = RegisteredInfo {
                                         eoa_address: api_validator_request_response_data_message
                                             .eoa_address,
@@ -938,6 +944,7 @@ impl EthgasCommitService {
                                     signatures.push(signature.to_string());
                                 }
 
+                                let mut newly_registered_key_num = 0;
                                 for (counter, (pubkey_chunk, sig_chunk)) in
                                     pubkeys.chunks(100).zip(signatures.chunks(100)).enumerate()
                                 {
@@ -961,7 +968,7 @@ impl EthgasCommitService {
                                         match res.json::<APILoginVerifyResponse>().await {
                                             Ok(res_json) => {
                                                 if res_json.success {
-                                                    info!("successfully refreshed access jwt!");
+                                                    info!("successfully refreshed access jwt");
                                                     access_jwt = res_json.data.access_token.token;
                                                 } else {
                                                     error!("failed to refresh access jwt");
@@ -986,7 +993,7 @@ impl EthgasCommitService {
                                         .join(",");
 
                                     let mut form_data = HashMap::new();
-                                    form_data.insert("publicKeys", pubkeys_str);
+                                    form_data.insert("publicKeys", pubkeys_str.clone());
                                     form_data.insert("signatures", signatures_str);
                                     exchange_api_url = Url::parse(&format!(
                                         "{}{}",
@@ -1030,11 +1037,12 @@ impl EthgasCommitService {
                                             if res_json_verify.success {
                                                 if !registered_keys.is_empty() {
                                                     if self.config.extra.enable_pricer {
-                                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!");
+                                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
                                                     } else {
-                                                        info!("successful registration, you can now sell preconfs on ETHGas!");
+                                                        info!("successful registration, you can now sell preconfs on ETHGas");
                                                     }
                                                     info!(number = registered_keys.len(), registered_validators = ?registered_keys);
+                                                    newly_registered_key_num += registered_keys.len();
                                                 }
                                                 if !previously_registered_keys.is_empty() {
                                                     warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
@@ -1042,6 +1050,15 @@ impl EthgasCommitService {
                                                 if !keys_with_invalid_signature.is_empty() {
                                                     error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
                                                 }
+
+                                                update_ofac(
+                                                    &client,
+                                                    &self.config.extra.registration_mode,
+                                                    &self.config.extra.exchange_api_base,
+                                                    &access_jwt,
+                                                    self.config.extra.enable_ofac,
+                                                    pubkeys_str,
+                                                ).await?;
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
@@ -1054,10 +1071,10 @@ impl EthgasCommitService {
                                             e
                                         ),
                                     }
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
-                                        .await;
                                 }
+                                info!(?newly_registered_key_num);
                             } else {
+                                let mut deregistered_key_num = 0;
                                 for pubkey_chunk in pubkeys.chunks(100) {
                                     let pubkeys_str = pubkey_chunk
                                         .iter()
@@ -1082,8 +1099,9 @@ impl EthgasCommitService {
                                     match res.json::<APIValidatorDeregisterResponse>().await {
                                         Ok(res_json) => {
                                             if res_json.success {
-                                                info!("successful deregistration!");
+                                                info!("successful deregistration");
                                                 info!(number = res_json.data.deleted.len(), deregistered_validators = ?res_json.data.deleted);
+                                                deregistered_key_num += res_json.data.deleted.len();
                                             } else {
                                                 error!("failed to deregister");
                                             }
@@ -1092,9 +1110,8 @@ impl EthgasCommitService {
                                             error!(?err, "failed to call validator deregister API");
                                         }
                                     }
-                                    sleep(Duration::from_millis(api_wait_interval_in_ms.into()))
-                                        .await;
                                 }
+                                info!(?deregistered_key_num);
                             }
                         }
                         None => error!("failed to get user EOA address from the exchange"),
@@ -1108,6 +1125,21 @@ impl EthgasCommitService {
             info!("skipped registration or deregistration");
         } else {
             error!("invalid registration mode");
+        }
+
+        if self.config.extra.query_pubkey {
+            info!("querying all your registered pubkeys...");
+            get_registered_all_pubkeys(
+                &client,
+                self.config.extra.exchange_api_base.clone(),
+                &access_jwt
+            ).await?;
+
+            get_registered_ssv_pubkeys(
+                &client,
+                self.config.extra.exchange_api_base.clone(),
+                &access_jwt
+            ).await?;
         }
 
         Ok(())
@@ -1166,7 +1198,6 @@ async fn main() -> Result<()> {
                 if !config.extra.is_jwt_provided {
                     let exchange_service = EthgasExchangeService {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
-                        chain_id: config.extra.chain_id.clone(),
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signing_key: match config.extra.eoa_signing_key {
                             Some(eoa) => eoa,
@@ -1191,7 +1222,6 @@ async fn main() -> Result<()> {
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
                             let service = EthgasExchangeService {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
-                                chain_id: exchange_service.chain_id.clone(),
                                 entity_name: exchange_service.entity_name.clone(),
                                 eoa_signing_key: exchange_service.eoa_signing_key,
                             };

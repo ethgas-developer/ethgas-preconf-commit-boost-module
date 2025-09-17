@@ -138,6 +138,9 @@ validator_registration_batch_size = ""
 # [[mux.relays]]
 # id = "ethgas"
 # url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
+# enable_timing_games = true
+# target_first_request_ms = 0
+# frequency_get_header_ms = 100
 
 # Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`
 # Currently three types of Signer modules are supported (only one can be used at a time):
@@ -238,14 +241,15 @@ docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://hoodi.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 overall_wait_interval_in_second = 0
-api_wait_interval_in_ms = 0
 registration_mode = "standard" # standard, standard-mux, ssv, skipped
 enable_registration = true
 enable_pricer = true
 enable_builder = false
+enable_ofac = false
 collateral_per_slot = "0"
 builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
 is_jwt_provided = false
+query_pubkey = true
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
