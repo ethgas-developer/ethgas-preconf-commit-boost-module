@@ -62,7 +62,6 @@ rpc_url = "https://ethereum-rpc.publicnode.com"
 # OPTIONAL, DEFAULT: URL hostname
 id = "ethgas-us"
 # Relay URL in the format scheme://pubkey@host
-# Please DO NOT change the url to use any other relay, otherwise you will get slashed
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
 # Headers to send with each request for this relay
 # OPTIONAL
@@ -89,7 +88,7 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 # 3) CL request comes 2500ms in the slot then:
 #   - return 204 and force local build
 #
-# OPTIONAL, DEFAULT: false
+# OPTIONAL, DEFAULT: false, please consult us if you wanna delay the validator signing from the consensus client
 enable_timing_games = true
 # Target time in slot when to send the first header request
 # OPTIONAL
@@ -269,7 +268,7 @@ docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 exchange_api_base = "https://mainnet.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 overall_wait_interval_in_second = 0
-registration_mode = "standard" # standard, standard-mux, ssv, skipped
+registration_mode = "standard" # standard, standard-mux, ssv, obol, skipped
 enable_registration = true
 enable_pricer = true
 enable_builder = false
@@ -303,6 +302,29 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 # ]
 # ssv_node_operator_owner_validator_pubkeys = [
 #     [], # this will trigger the registration of all associated BLS pubkeys obtained from SSV API
+#     [ "0x...", "0x..." ],
+#     [ "0x..." ]
+# ]
+# below configs are only for obol validators
+# obol_node_operator_owner_mode = "key" # key, keystore, ledger
+# obol_node_operator_owner_signing_keys = [
+#     "0x...",
+#     "0x...",
+#     "0x..."
+# ]
+# Alternatively, you can set OBOL_NODE_OPERATOR_OWNER_SIGNING_KEYS=0x...,0x... in .cb.env as an env variable
+# you could also use secure keystore files instead of raw private keys
+# obol_node_operator_owner_keystores = [
+#     { keystore_path = "/path/to/keystore1.json", password_path = "/path/to/password1.txt" },
+#     { keystore_path = "/path/to/keystore2.json", password_path = "/path/to/password2.txt" },
+#     { keystore_path = "/path/to/keystore3.json", password_path = "/path/to/password3.txt" }
+# ]
+# Alternatively, you can set OBOL_NODE_OPERATOR_OWNER_KEYSTORE_PATHS=/path/to/keystore1.json,/path/to/keystore2.json,/path/to/keystore3.json and OBOL_NODE_OPERATOR_OWNER_PASSWORD_PATHS=/path/to/password1.txt,/path/to/password2.txt,/path/to/password3.txt in .cb.env as env variables
+# obol_node_operator_owner_ledger_paths = [
+#     "m/44'/60'/0'/0"
+# ]
+# obol_node_operator_owner_validator_pubkeys = [
+#     [], # this will trigger the registration of all associated BLS pubkeys obtained from OBOL API
 #     [ "0x...", "0x..." ],
 #     [ "0x..." ]
 # ]

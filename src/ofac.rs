@@ -27,6 +27,8 @@ pub async fn update_ofac(
     let api_endpoint: &str;
     if registration_mode == "ssv" {
         api_endpoint = "/api/v1/user/ssv/operator/validator/update/ofac";
+    } else if registration_mode == "obol" {
+        api_endpoint = "/api/v1/user/obol/operator/validator/update/ofac";
     } else {
         api_endpoint = "/api/v1/validator/update/ofac";
     }
