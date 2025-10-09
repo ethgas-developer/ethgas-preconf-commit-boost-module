@@ -302,8 +302,7 @@ pub async fn register_obol_keys(
 
     for i in 0..obol_node_operator_signers.len() {
         let signer = obol_node_operator_signers.get(i).unwrap();
-        // let obol_node_operator_owner_address = signer.address();
-        let obol_node_operator_owner_address = "0xbc29BAC9815b5Ee2D161BcFC385B83D1dcf06924";
+        let obol_node_operator_owner_address = signer.address();
         info!(
             "Obol node operator owner address: {}",
             obol_node_operator_owner_address

@@ -180,7 +180,7 @@ pub async fn get_registered_ssv_pubkeys(
                                     if res_json.data.validators.len() > 0 {
                                         let now = Local::now();
                                         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
-                                        let filename = format!("registered_ssv_owner_{}_ssv_pubkeys_{}.txt", owner_address, timestamp);
+                                        let filename = format!("registered_ssv_operator_owner_{}_ssv_pubkeys_{}.txt", owner_address, timestamp);
                                         let mut file = File::create(&filename)?;
                                         for key in res_json.data.validators {
                                             writeln!(file, "{}", key)?;
@@ -188,7 +188,7 @@ pub async fn get_registered_ssv_pubkeys(
 
                                         info!("Records are saved in {}", filename);
                                     } else {
-                                        warn!("No registered ssv pubkeys for ssv owner {} can be found", owner_address);
+                                        warn!("No registered ssv pubkeys for ssv operator owner {} can be found", owner_address);
                                     }
                                 }
                             }
@@ -257,7 +257,7 @@ pub async fn get_registered_obol_pubkeys(
                                     if res_json.data.validators.len() > 0 {
                                         let now = Local::now();
                                         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
-                                        let filename = format!("registered_obol_owner_{}_obol_pubkeys_{}.txt", owner_address, timestamp);
+                                        let filename = format!("registered_obol_operator_owner_{}_obol_pubkeys_{}.txt", owner_address, timestamp);
                                         let mut file = File::create(&filename)?;
                                         for key in res_json.data.validators {
                                             writeln!(file, "{}", key)?;
@@ -265,7 +265,7 @@ pub async fn get_registered_obol_pubkeys(
 
                                         info!("Records are saved in {}", filename);
                                     } else {
-                                        warn!("No registered obol pubkeys for obol owner {} can be found", owner_address);
+                                        warn!("No registered obol pubkeys for obol operator owner {} can be found", owner_address);
                                     }
                                 }
                             }
