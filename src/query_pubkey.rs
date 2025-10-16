@@ -53,6 +53,35 @@ pub struct APIGetSsvOperatorValidatorsResponseData {
     pub validators: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct APIGetObolOperatorsResponse {
+    pub success: bool,
+    pub data: APIGetObolOperatorsResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct APIGetObolOperatorsResponseData {
+    pub operators: Vec<APIGetObolOperatorsResponseDataOperators>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct APIGetObolOperatorsResponseDataOperators {
+    pub address: String
+}
+
+#[derive(Debug, Deserialize)]
+pub struct APIGetObolOperatorValidatorsResponse {
+    pub success: bool,
+    pub data: APIGetObolOperatorValidatorsResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct APIGetObolOperatorValidatorsResponseData {
+    pub validators: Vec<String>,
+}
+
 pub async fn get_registered_all_pubkeys(
     client: &Client,
     exchange_api_base: String,
@@ -151,7 +180,7 @@ pub async fn get_registered_ssv_pubkeys(
                                     if res_json.data.validators.len() > 0 {
                                         let now = Local::now();
                                         let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
-                                        let filename = format!("registered_ssv_owner_{}_ssv_pubkeys_{}.txt", owner_address, timestamp);
+                                        let filename = format!("registered_ssv_operator_owner_{}_ssv_pubkeys_{}.txt", owner_address, timestamp);
                                         let mut file = File::create(&filename)?;
                                         for key in res_json.data.validators {
                                             writeln!(file, "{}", key)?;
@@ -159,7 +188,7 @@ pub async fn get_registered_ssv_pubkeys(
 
                                         info!("Records are saved in {}", filename);
                                     } else {
-                                        warn!("No registered ssv pubkeys for ssv owner {} can be found", owner_address);
+                                        warn!("No registered ssv pubkeys for ssv operator owner {} can be found", owner_address);
                                     }
                                 }
                             }
@@ -176,6 +205,83 @@ pub async fn get_registered_ssv_pubkeys(
         }
         Err(err) => {
             error!(?err, "Failed to call get ssv operator owner API");
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn get_registered_obol_pubkeys(
+    client: &Client,
+    exchange_api_base: String,
+    access_jwt: &str,
+) -> Result<(), Box<dyn Error>> {
+    let mut exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base,
+        "/api/v1/user/obol/operators"
+    ))?;
+
+    let mut res = client
+        .get(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+
+    match res.json::<APIGetObolOperatorsResponse>().await {
+        Ok(res_json) => {
+            if res_json.success {
+                if res_json.data.operators.len() > 0 {
+                    let owner_addresses: Vec<String> = res_json
+                        .data
+                        .operators
+                        .into_iter()
+                        .map(|v| v.address)
+                        .collect();
+                    for owner_address in &owner_addresses {
+                        exchange_api_url = Url::parse(&format!(
+                            "{}{}",
+                            exchange_api_base,
+                            "/api/v1/user/obol/operator/validators"
+                        ))?;
+                        res = client
+                            .get(exchange_api_url.to_string())
+                            .header("Authorization", format!("Bearer {}", access_jwt))
+                            .query(&[("operatorAddress", owner_address)])
+                            .send()
+                            .await?;
+
+                        match res.json::<APIGetObolOperatorValidatorsResponse>().await {
+                            Ok(res_json) => {
+                                if res_json.success {
+                                    if res_json.data.validators.len() > 0 {
+                                        let now = Local::now();
+                                        let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
+                                        let filename = format!("registered_obol_operator_owner_{}_obol_pubkeys_{}.txt", owner_address, timestamp);
+                                        let mut file = File::create(&filename)?;
+                                        for key in res_json.data.validators {
+                                            writeln!(file, "{}", key)?;
+                                        }
+
+                                        info!("Records are saved in {}", filename);
+                                    } else {
+                                        warn!("No registered obol pubkeys for obol operator owner {} can be found", owner_address);
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                error!(?err, "Failed to call get obol operator validators API");
+                            }
+                        }
+                    }
+
+                } else {
+                    warn!("No registered obol operator owner can be found");
+                }
+            }
+        }
+        Err(err) => {
+            error!(?err, "Failed to call get obol operator owner API");
         }
     }
 

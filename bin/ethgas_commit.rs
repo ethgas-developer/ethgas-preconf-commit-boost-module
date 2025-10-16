@@ -17,7 +17,10 @@ use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, 
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
-use ethgas_commit::{ofac::update_ofac, query_pubkey::{get_registered_all_pubkeys, get_registered_ssv_pubkeys}};
+use ethgas_commit::{
+    ofac::update_ofac, query_pubkey::{get_registered_all_pubkeys, get_registered_ssv_pubkeys, get_registered_obol_pubkeys}, obol_registry::{register_obol_keys},
+    models::KeystoreConfig
+};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -68,15 +71,14 @@ struct ExtraConfig {
     refresh_jwt: Option<String>,
     ssv_node_operator_owner_mode: Option<String>,
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
-    ssv_node_operator_owner_keystores: Option<Vec<SsvKeystoreConfig>>,
+    ssv_node_operator_owner_keystores: Option<Vec<KeystoreConfig>>,
     ssv_node_operator_owner_ledger_paths: Option<Vec<String>>,
     ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
-}
-
-#[derive(Debug, Deserialize)]
-struct SsvKeystoreConfig {
-    keystore_path: PathBuf,
-    password_path: PathBuf,
+    obol_node_operator_owner_mode: Option<String>,
+    obol_node_operator_owner_signing_keys: Option<Vec<B256>>,
+    obol_node_operator_owner_keystores: Option<Vec<KeystoreConfig>>,
+    obol_node_operator_owner_ledger_paths: Option<Vec<String>>,
+    obol_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -885,6 +887,22 @@ impl EthgasCommitService {
                     }
                 }
             }
+        } else if self.config.extra.registration_mode == "obol" {
+            register_obol_keys(
+                &client,
+                &access_jwt,
+                &self.config.extra.exchange_api_base,
+                self.config.extra.enable_registration,
+                &self.config.extra.registration_mode,
+                self.config.extra.enable_pricer,
+                self.config.extra.enable_ofac,
+                &self.config.extra.obol_node_operator_owner_mode,
+                &self.config.extra.obol_node_operator_owner_signing_keys,
+                &self.config.extra.obol_node_operator_owner_keystores,
+                &self.config.extra.obol_node_operator_owner_ledger_paths,
+                &self.config.extra.obol_node_operator_owner_validator_pubkeys,
+            ).await?;
+
         } else if self.config.extra.registration_mode == "standard"
             || self.config.extra.registration_mode == "standard-mux"
         {
@@ -1136,6 +1154,12 @@ impl EthgasCommitService {
             ).await?;
 
             get_registered_ssv_pubkeys(
+                &client,
+                self.config.extra.exchange_api_base.clone(),
+                &access_jwt
+            ).await?;
+
+            get_registered_obol_pubkeys(
                 &client,
                 self.config.extra.exchange_api_base.clone(),
                 &access_jwt
