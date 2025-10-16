@@ -338,7 +338,7 @@ docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 block_confirmation = 12
 exchange_api_base = "https://mainnet.app.ethgas.com"
 collateral_to_be_deposited = "0.01"
-collateral_contract = "0x41c95AB9DBAC21B3992963Adf0e90F6478364b88"
+collateral_contract = "0x3314Fb492a5d205A601f2A0521fAFbD039502Fc3"
 eoa_signing_key = "0x..."
 
 

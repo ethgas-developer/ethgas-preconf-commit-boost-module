@@ -13,7 +13,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Config Setup
 * Copy one of the `config.example.<env>.toml` as `config.toml`
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
-* Create an empty `.cb.env` file and run `docker-compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
+* Create an empty `.cb.env` file and run `docker compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
 * Do not use any other relay than the one listed in the `config.example.<env>.toml`, otherwise you will get slashed
 * Registration of SSV or Obol validators can skip signer-related setup below
 * For local signer module, Commit Boost supports various consensus client. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
@@ -57,17 +57,17 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * mount the correct validator keystore directories from the host machine to the container `/keys` and `/secrets` directory
 
 ## Start the Signer module
-* For registration of non-DVT validators, run `docker-compose -f docker-compose.yml up cb_signer`
+* For registration of non-DVT validators, run `docker compose -f docker-compose.yml up cb_signer`
     * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0" commit_hash="f51f5bd61831fde943057b29ffd6e26e7eb23765" modules=["ETHGAS_COMMIT"] endpoint=0.0.0.0:20000 loaded_consensus=100 loaded_proxies=0` where `loaded_consensus` indicates the total number of loaded keys
 
 ## Start the ETHGas Commit module
 * You are advised to run this module at or after the 2nd slot of the epoch so you could have more time to configure the PBS module
-* Run `docker-compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
+* Run `docker compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
     * you will see the log `INFO successful registration, you can now sell preconfs on ETHGas!` or `INFO successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!` if all goes well
     * if the module encounters `ConnectionRefused` error when it tries to connect to `http://cb_signer:20000/signer/v1/get_pubkeys`, please wait for 20 minutes to retry
 
 ## Start the PBS module
-* Start the PBS module by running `docker-compose -f docker-compose.yml up cb_pbs`
+* Start the PBS module by running `docker compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
 * You are advised to stop MEV-Boost and immediately start the PBS module once the ETHGas Commit module has completed the registration process.
@@ -81,11 +81,11 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * under `[[modules]]` section where `id = ETHGAS_DEPOSIT`,
     * set `collateral_to_be_deposited` to be >= `collateral_per_slot` of ETHGas Commit module
     * set `eoa_signing_key` which should equal to the one in ETHGas Commit module above
-    * Run ETHGas Deposit module by `docker-compose -f docker-compose-example-deposit.yml up`
+    * Run ETHGas Deposit module by `docker compose -f docker-compose-example-deposit.yml up`
 
 ### Through direct contract interaction
-* Collateral contract (EthgasPool) on mainnet: [0x41c95AB9DBAC21B3992963Adf0e90F6478364b88](https://etherscan.io/address/0x41c95AB9DBAC21B3992963Adf0e90F6478364b88#writeContract)
-    * on hoodi: [0xe8bfB84b14c383b94365a895fc8bfA36dE236dc8](https://hoodi.etherscan.io/address/0xe8bfB84b14c383b94365a895fc8bfA36dE236dc8#writeContract)
+* Collateral contract (EthgasPool) on mainnet: [0x3314Fb492a5d205A601f2A0521fAFbD039502Fc3](https://etherscan.io/address/0x3314Fb492a5d205A601f2A0521fAFbD039502Fc3#writeContract)
+    * on hoodi: [0x104Ef4192a97E0A93aBe8893c8A2d2484DFCBAF1](https://hoodi.etherscan.io/address/0x104Ef4192a97E0A93aBe8893c8A2d2484DFCBAF1#writeContract)
 * Call deposit function of the EthgasPool contract which can accept both WETH and native ETH. Below are the ABI details.
 ```
 struct TokenTransfer {
@@ -98,7 +98,7 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 
 ## Debug cb_ethgas_commit locally
 * To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
-* Then run `docker-compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
+* Then run `docker compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
 ## Audit
 * The module has been audited by [Sigma Prime](https://sigmaprime.io/). Find the report [here](https://github.com/ethgas-developer/ethgas-audit)
