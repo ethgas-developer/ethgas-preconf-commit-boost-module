@@ -1,6 +1,6 @@
 [package]
 name = "ethgas_commit_boost_modules"
-version = "1.0.0"
+version = "1.0.1"
 rust-version = "1.83"
 edition = "2021"
 
