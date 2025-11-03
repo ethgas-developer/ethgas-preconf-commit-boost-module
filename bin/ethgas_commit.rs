@@ -10,10 +10,10 @@ use cookie::Cookie;
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
-use reqwest::{Client, Url};
+use reqwest::{Client, Url, Response};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, error::Error, path::PathBuf, str::FromStr, time::Duration};
+use std::{collections::HashMap, env, error::Error, str::FromStr, time::Duration};
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
@@ -772,11 +772,6 @@ impl EthgasCommitService {
                     }
                 }
 
-                let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i]
-                    .iter()
-                    .map(|key| key.to_string())
-                    .collect::<Vec<String>>()
-                    .join(",");
                 if self.config.extra.enable_registration {
                     warn!("it may take up to 30 seconds to register all SSV validator pubkeys if there are many pubkeys");
                     exchange_api_url = Url::parse(&format!(
@@ -784,107 +779,84 @@ impl EthgasCommitService {
                         self.config.extra.exchange_api_base,
                         "/api/v1/user/ssv/operator/validator/register"
                     ))?;
-                    res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
-                        client
+                    if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
+                        res = client
                             .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                             .send()
-                            .await?
+                            .await?;
+                        
+                        let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i]
+                            .iter()
+                            .map(|key| key.to_string())
+                            .collect::<Vec<String>>()
+                            .join(",");
+
+                        self.ssv_validator_register_response(res, &client, &access_jwt, pubkeys_str_list).await?;
+
                     } else {
-                        client
-                            .post(exchange_api_url.to_string())
-                            .header("User-Agent", "cb_ethgas_commit")
-                            .header("Authorization", format!("Bearer {}", access_jwt))
-                            .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                            .query(&[("publicKeys", pubkeys_str_list.clone())])
-                            .send()
-                            .await?
+                        for (_counter, pubkey_chunk) in ssv_node_operator_owner_validator_pubkeys[i].chunks(35).enumerate() {
+                            let pubkeys_chunk_list = pubkey_chunk
+                                .iter()
+                                .map(|key| key.to_string())
+                                .collect::<Vec<String>>()
+                                .join(",");
+
+                            res = client
+                                .post(exchange_api_url.to_string())
+                                .header("User-Agent", "cb_ethgas_commit")
+                                .header("Authorization", format!("Bearer {}", access_jwt))
+                                .query(&[("ownerAddress", ssv_node_operator_owner_address)])
+                                .query(&[("publicKeys", pubkeys_chunk_list.clone())])
+                                .send()
+                                .await?;
+                            
+                            self.ssv_validator_register_response(res, &client, &access_jwt, pubkeys_chunk_list).await?;
+
+                        }
+
                     };
 
-                    match res.json::<APISsvValidatorRegisterResponse>().await {
-                        Ok(result) => {
-                            match result.success {
-                                true => {
-                                    match result.data.validators.clone() {
-                                        None => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
-                                        Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
-                                        Some(_) => {
-                                            if self.config.extra.enable_pricer {
-                                                info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
-                                            } else {
-                                                info!("successful registration, you can now sell preconfs on ETHGas");
-                                            }
-                                            let result_data_validators = result.data.validators.unwrap_or_default();
-                                            info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
-
-                                            update_ofac(
-                                                &client,
-                                                &self.config.extra.registration_mode,
-                                                &self.config.extra.exchange_api_base,
-                                                &access_jwt,
-                                                self.config.extra.enable_ofac,
-                                                pubkeys_str_list,
-                                            ).await?;
-                                        }
-                                    }
-                                },
-                                false => {
-                                    error!("failed to register ssv validator pubkeys: {}", result.error_msg_key.unwrap_or_default());
-                                }
-                            }
-                        },
-                        Err(err) => {
-                            error!(?err, "failed to call ssv validator register API");
-                        }
-                    }
                 } else {
                     exchange_api_url = Url::parse(&format!(
                         "{}{}",
                         self.config.extra.exchange_api_base,
                         "/api/v1/user/ssv/operator/validator/deregister"
                     ))?;
-                    res = if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
-                        client
+                    if ssv_node_operator_owner_validator_pubkeys[i].is_empty() {
+                        res = client
                             .post(exchange_api_url.to_string())
                             .header("User-Agent", "cb_ethgas_commit")
                             .header("Authorization", format!("Bearer {}", access_jwt))
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                             .send()
-                            .await?
-                    } else {
-                        client
-                            .post(exchange_api_url.to_string())
-                            .header("User-Agent", "cb_ethgas_commit")
-                            .header("Authorization", format!("Bearer {}", access_jwt))
-                            .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                            .query(&[("publicKeys", pubkeys_str_list)])
-                            .send()
-                            .await?
-                    };
+                            .await?;
 
-                    match res.json::<APISsvValidatorDeregisterResponse>().await {
-                        Ok(result) => match result.success {
-                            true => {
-                                if result.data.removed.is_empty() {
-                                    warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
-                                } else {
-                                    info!("successful deregistration");
-                                    info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
-                                }
-                            }
-                            false => {
-                                error!(
-                                    "failed to deregister ssv validator pubkeys: {}",
-                                    result.error_msg_key.unwrap_or_default()
-                                );
-                            }
-                        },
-                        Err(err) => {
-                            error!(?err, "failed to call ssv validator deregister API");
+                        self.ssv_validator_deregister_response(res).await?;
+
+                    } else {
+                        for (_counter, pubkey_chunk) in ssv_node_operator_owner_validator_pubkeys[i].chunks(35).enumerate() {
+                            let pubkeys_chunk_list = pubkey_chunk
+                                .iter()
+                                .map(|key| key.to_string())
+                                .collect::<Vec<String>>()
+                                .join(",");
+
+                            res = client
+                                .post(exchange_api_url.to_string())
+                                .header("User-Agent", "cb_ethgas_commit")
+                                .header("Authorization", format!("Bearer {}", access_jwt))
+                                .query(&[("ownerAddress", ssv_node_operator_owner_address)])
+                                .query(&[("publicKeys", pubkeys_chunk_list)])
+                                .send()
+                                .await?;
+
+                            self.ssv_validator_deregister_response(res).await?;
+
                         }
-                    }
+                    };
                 }
             }
         } else if self.config.extra.registration_mode == "obol" {
@@ -1166,6 +1138,71 @@ impl EthgasCommitService {
             ).await?;
         }
 
+        Ok(())
+    }
+
+    async fn ssv_validator_register_response(&self, res: Response, client: &Client, access_jwt: &str, pubkeys_str_list: String) -> Result<()> {
+        match res.json::<APISsvValidatorRegisterResponse>().await {
+            Ok(result) => {
+                match result.success {
+                    true => {
+                        match result.data.validators.clone() {
+                            None => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
+                            Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
+                            Some(_) => {
+                                if self.config.extra.enable_pricer {
+                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
+                                } else {
+                                    info!("successful registration, you can now sell preconfs on ETHGas");
+                                }
+                                let result_data_validators = result.data.validators.unwrap_or_default();
+                                info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
+
+                                update_ofac(
+                                    &client,
+                                    &self.config.extra.registration_mode,
+                                    &self.config.extra.exchange_api_base,
+                                    &access_jwt,
+                                    self.config.extra.enable_ofac,
+                                    pubkeys_str_list,
+                                ).await.map_err(|err| eyre::eyre!("failed to update OFAC status: {}", err))?;
+                            }
+                        }
+                    },
+                    false => {
+                        error!("failed to register ssv validator pubkeys: {}", result.error_msg_key.unwrap_or_default());
+                    }
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call ssv validator register API");
+            }
+        }
+        Ok(())
+    }
+
+    async fn ssv_validator_deregister_response(&self, res: Response) -> Result<()> {
+        match res.json::<APISsvValidatorDeregisterResponse>().await {
+            Ok(result) => match result.success {
+                true => {
+                    if result.data.removed.is_empty() {
+                        warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
+                    } else {
+                        info!("successful deregistration");
+                        info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
+                    }
+                }
+                false => {
+                    error!(
+                        "failed to deregister ssv validator pubkeys: {}",
+                        result.error_msg_key.unwrap_or_default()
+                    );
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call ssv validator deregister API");
+            }
+        }
         Ok(())
     }
 }
