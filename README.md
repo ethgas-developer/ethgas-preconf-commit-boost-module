@@ -61,7 +61,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0" commit_hash="f51f5bd61831fde943057b29ffd6e26e7eb23765" modules=["ETHGAS_COMMIT"] endpoint=0.0.0.0:20000 loaded_consensus=100 loaded_proxies=0` where `loaded_consensus` indicates the total number of loaded keys
 
 ## Start the ETHGas Commit module
-* You are advised to run this module at or after the 2nd slot of the epoch so you could have more time to configure the PBS module
+* You are advised to run this module at or after the 2nd slot of the current epoch so you could have more time to configure the PBS module
 * Run `docker compose -f docker-compose.yml up cb_ethgas_commit` to register in ETHGas Exchange
     * you will see the log `INFO successful registration, you can now sell preconfs on ETHGas!` or `INFO successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you!` if all goes well
     * if the module encounters `ConnectionRefused` error when it tries to connect to `http://cb_signer:20000/signer/v1/get_pubkeys`, please wait for 20 minutes to retry
@@ -70,7 +70,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Start the PBS module by running `docker compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
-* You are advised to stop MEV-Boost and immediately start the PBS module once the ETHGas Commit module has completed the registration process.
+* Once the ETHGas Commit module has completed the registration process, please stop the MEV-Boost and immediately start the PBS module right before the start of the next epoch.
 * To hot reload the config without restarting the module, run `docker compose -f docker-compose.yml exec cb_pbs curl -X POST http://localhost:18550/reload`. You will see the log `INFO : config reload successful` if the config reloads successfully. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration/#hot-reload) for more details.
 
 ## Deposit ETH to our collateral contract
