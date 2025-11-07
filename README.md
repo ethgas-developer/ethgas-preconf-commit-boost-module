@@ -70,7 +70,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 * Start the PBS module by running `docker compose -f docker-compose.yml up cb_pbs`
 * update builder/relay config of your beacon node from pointing towards MEV-Boost to `cb_pbs` endpoint where the port is `18550` by default
     * you will see the log `DEBUG register_validators{req_id=...}:handler{relay_id="ethgas"}: registration successful code=200 latency=...ms` if all goes well
-* Once the ETHGas Commit module has completed the registration process, please stop the MEV-Boost and immediately start the PBS module right before the start of the next epoch.
+* Once the ETHGas Commit module has completed the registration process and right before the start of the next epoch, please stop the MEV-Boost, restart the beacon node with new builder endpoint and immediately start the PBS module.
 * To hot reload the config without restarting the module, run `docker compose -f docker-compose.yml exec cb_pbs curl -X POST http://localhost:18550/reload`. You will see the log `INFO : config reload successful` if the config reloads successfully. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration/#hot-reload) for more details.
 
 ## Deposit ETH to our collateral contract
