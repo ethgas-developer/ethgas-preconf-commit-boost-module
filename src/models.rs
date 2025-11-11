@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
-use std::{path::PathBuf};
+use serde::Deserialize;
+use std::path::PathBuf;
 
 #[derive(Debug, Deserialize)]
 pub struct KeystoreConfig {

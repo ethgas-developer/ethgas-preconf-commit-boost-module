@@ -1,8 +1,8 @@
 use eyre::Result;
 use reqwest::{Client, Url};
+use serde::Deserialize;
 use std::{collections::HashMap, error::Error};
 use tracing::{error, info};
-use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,11 +32,7 @@ pub async fn update_ofac(
     } else {
         api_endpoint = "/api/v1/validator/update/ofac";
     }
-    let exchange_api_url = Url::parse(&format!(
-        "{}{}",
-        exchange_api_base,
-        api_endpoint
-    ))?;
+    let exchange_api_url = Url::parse(&format!("{}{}", exchange_api_base, api_endpoint))?;
 
     let res = client
         .post(exchange_api_url.to_string())
@@ -54,18 +50,16 @@ pub async fn update_ofac(
                 } else {
                     info!("successfully disabled ofac for the above registered validators");
                 }
+            } else if enable_ofac {
+                error!(
+                    "failed to enable ofac: {}",
+                    res_json.error_msg_key.unwrap_or_default()
+                );
             } else {
-                if enable_ofac {
-                    error!(
-                        "failed to enable ofac: {}",
-                        res_json.error_msg_key.unwrap_or_default()
-                    );
-                } else {
-                    error!(
-                        "failed to disable ofac: {}",
-                        res_json.error_msg_key.unwrap_or_default()
-                    );
-                }
+                error!(
+                    "failed to disable ofac: {}",
+                    res_json.error_msg_key.unwrap_or_default()
+                );
             }
         }
         Err(err) => {

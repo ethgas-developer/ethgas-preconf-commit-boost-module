@@ -1,26 +1,34 @@
 use alloy::{
     hex::encode,
-    primitives::{FixedBytes, B256, PrimitiveSignature},
-    signers::{local::PrivateKeySigner, Signer, ledger::{HDPath, LedgerSigner}, Error as SignerError},
+    primitives::{FixedBytes, Signature, B256},
+    signers::{
+        ledger::{HDPath, LedgerSigner},
+        local::PrivateKeySigner,
+        Error as SignerError, Signer,
+    },
     sol,
     sol_types::{eip712_domain, Eip712Domain, SolStruct},
 };
 use commit_boost::prelude::*;
 use cookie::Cookie;
+use ethgas_commit::{
+    models::KeystoreConfig,
+    obol_registry::register_obol_keys,
+    ofac::update_ofac,
+    query_pubkey::{
+        get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
+    },
+};
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
-use reqwest::{Client, Url, Response};
+use reqwest::{Client, Response, Url};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, env, error::Error, str::FromStr, time::Duration};
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
-use ethgas_commit::{
-    ofac::update_ofac, query_pubkey::{get_registered_all_pubkeys, get_registered_ssv_pubkeys, get_registered_obol_pubkeys}, obol_registry::{register_obol_keys},
-    models::KeystoreConfig
-};
 
 // You can define custom metrics and a custom registry for the business logic of
 // your module. These will be automatically scaped by the Prometheus server
@@ -329,7 +337,11 @@ impl SSVSigner {
         }
     }
 
-    pub async fn sign_typed_data(&self, message: &data, domain: &Eip712Domain) -> Result<PrimitiveSignature, SignerError> {
+    pub async fn sign_typed_data(
+        &self,
+        message: &data,
+        domain: &Eip712Domain,
+    ) -> Result<Signature, SignerError> {
         match self {
             SSVSigner::Ledger(signer) => signer.sign_typed_data(message, domain).await,
             SSVSigner::PrivateKey(signer) => signer.sign_typed_data(message, domain).await,
@@ -341,7 +353,6 @@ async fn generate_eip712_signature_for_ssv(
     eip712_message_str: &str,
     signer: &SSVSigner,
 ) -> Result<String> {
-
     let eip712_message: Eip712MessageSsv = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
 
@@ -549,44 +560,50 @@ impl EthgasCommitService {
         }
 
         if self.config.extra.registration_mode == "ssv" {
-            let ssv_node_operator_owner_validator_pubkeys = match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
-                Some(validator_pubkeys) => validator_pubkeys.clone(),
-                None => {
-                    return Err(std::io::Error::other(
-                        "ssv_node_operator_owner_validator_pubkeys cannot be empty",
-                    )
-                    .into())
-                }
-            };
-            let ssv_node_operator_signers: Vec<SSVSigner> = match &self.config.extra.ssv_node_operator_owner_mode {
+            let ssv_node_operator_owner_validator_pubkeys =
+                match &self.config.extra.ssv_node_operator_owner_validator_pubkeys {
+                    Some(validator_pubkeys) => validator_pubkeys.clone(),
+                    None => {
+                        return Err(std::io::Error::other(
+                            "ssv_node_operator_owner_validator_pubkeys cannot be empty",
+                        )
+                        .into())
+                    }
+                };
+            let ssv_node_operator_signers: Vec<SSVSigner> = match &self
+                .config
+                .extra
+                .ssv_node_operator_owner_mode
+            {
                 Some(mode) => match mode.as_str() {
                     "key" => {
-                        let ssv_node_operator_owner_signing_keys = match &self.config.extra.ssv_node_operator_owner_signing_keys {
-                            Some(signing_keys) => signing_keys.clone(),
-                            None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
-                                Ok(signing_keys_str) => signing_keys_str
-                                    .split(',')
-                                    .filter(|s| !s.trim().is_empty())
-                                    .map(|key| {
-                                        B256::from_str(key.trim()).map_err(|_| {
-                                            std::io::Error::new(
-                                                std::io::ErrorKind::InvalidData,
-                                                "Invalid signing key format".to_string(),
-                                            )
+                        let ssv_node_operator_owner_signing_keys =
+                            match &self.config.extra.ssv_node_operator_owner_signing_keys {
+                                Some(signing_keys) => signing_keys.clone(),
+                                None => match env::var("SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
+                                    Ok(signing_keys_str) => signing_keys_str
+                                        .split(',')
+                                        .filter(|s| !s.trim().is_empty())
+                                        .map(|key| {
+                                            B256::from_str(key.trim()).map_err(|_| {
+                                                std::io::Error::new(
+                                                    std::io::ErrorKind::InvalidData,
+                                                    "Invalid signing key format".to_string(),
+                                                )
+                                            })
                                         })
-                                    })
-                                    .collect::<Result<Vec<B256>, _>>()?,
-                                Err(_) => {
-                                    return Err(std::io::Error::other(
-                                        "ssv_node_operator_owner_signing_keys cannot be empty",
-                                    )
-                                    .into());
-                                }
-                            },
-                        };
+                                        .collect::<Result<Vec<B256>, _>>()?,
+                                    Err(_) => {
+                                        return Err(std::io::Error::other(
+                                            "ssv_node_operator_owner_signing_keys cannot be empty",
+                                        )
+                                        .into());
+                                    }
+                                },
+                            };
                         if ssv_node_operator_owner_signing_keys.is_empty() {
-                                return Err(std::io::Error::other(
-                                    "ssv_node_operator_owner_signing_keys cannot be empty",
+                            return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_signing_keys cannot be empty",
                             )
                             .into());
                         };
@@ -608,13 +625,20 @@ impl EthgasCommitService {
                             Some(keystores) => {
                                 let mut operator_signers = Vec::new();
                                 for keystore in keystores {
-                                    let password = std::fs::read_to_string(&keystore.password_path)?;
-                                    let signer = PrivateKeySigner::decrypt_keystore(&keystore.keystore_path, password.trim())
-                                        .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                                    let password =
+                                        std::fs::read_to_string(&keystore.password_path)?;
+                                    let private_key = eth_keystore::decrypt_key(
+                                        &keystore.keystore_path,
+                                        password.trim(),
+                                    )
+                                    .map_err(|e| eyre::eyre!("Failed to read keystore: {}", e))?;
+                                    let signer = PrivateKeySigner::from_slice(&private_key)
+                                        .map_err(|e| {
+                                            eyre::eyre!("Failed to create signer: {}", e)
+                                        })?;
                                     operator_signers.push(SSVSigner::PrivateKey(signer));
                                 }
                                 operator_signers
-
                             }
                             None => {
                                 let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORES");
@@ -636,14 +660,20 @@ impl EthgasCommitService {
                                         }
 
                                         let mut operator_signers = Vec::new();
-                                        for (keystore_path, password_path) in keystore_paths.iter().zip(password_paths.iter()) {
+                                        for (keystore_path, password_path) in
+                                            keystore_paths.iter().zip(password_paths.iter())
+                                        {
                                             let password = std::fs::read_to_string(password_path)?;
-                                            let signer = PrivateKeySigner::decrypt_keystore(keystore_path, password.trim())
-                                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                                            let signer = PrivateKeySigner::decrypt_keystore(
+                                                keystore_path,
+                                                password.trim(),
+                                            )
+                                            .map_err(|e| {
+                                                eyre::eyre!("Failed to create signer: {}", e)
+                                            })?;
                                             operator_signers.push(SSVSigner::PrivateKey(signer));
                                         }
                                         operator_signers
-
                                     }
                                     _ => {
                                         return Err(std::io::Error::other(
@@ -655,16 +685,18 @@ impl EthgasCommitService {
                             }
                         };
                         operator_signers
-
                     }
                     "ledger" => {
-                        let ssv_node_operator_owner_ledger_paths = match &self.config.extra.ssv_node_operator_owner_ledger_paths {
-                            Some(paths) => paths.clone(),
-                            None => return Err(std::io::Error::other(
-                                "ssv_node_operator_owner_ledger_paths cannot be empty",
-                            )
-                            .into()),
-                        };
+                        let ssv_node_operator_owner_ledger_paths =
+                            match &self.config.extra.ssv_node_operator_owner_ledger_paths {
+                                Some(paths) => paths.clone(),
+                                None => {
+                                    return Err(std::io::Error::other(
+                                        "ssv_node_operator_owner_ledger_paths cannot be empty",
+                                    )
+                                    .into())
+                                }
+                            };
                         if ssv_node_operator_owner_ledger_paths.len() != 1 {
                             return Err(std::io::Error::other(
                                 "ssv_node_operator_owner_ledger_paths cannot be empty or more than 1 path",
@@ -674,17 +706,24 @@ impl EthgasCommitService {
 
                         let mut operator_signers = Vec::new();
                         for path in ssv_node_operator_owner_ledger_paths {
-                            let signer = LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
+                            let signer =
+                                LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
                             operator_signers.push(SSVSigner::Ledger(signer));
                         }
                         operator_signers
                     }
                     _ => {
-                        return Err(std::io::Error::other("Unsupported ssv_node_operator_owner_mode").into());
+                        return Err(std::io::Error::other(
+                            "Unsupported ssv_node_operator_owner_mode",
+                        )
+                        .into());
                     }
-                }
+                },
                 None => {
-                    return Err(std::io::Error::other("ssv_node_operator_owner_mode cannot be empty").into());
+                    return Err(std::io::Error::other(
+                        "ssv_node_operator_owner_mode cannot be empty",
+                    )
+                    .into());
                 }
             };
 
@@ -693,7 +732,7 @@ impl EthgasCommitService {
             }
 
             for i in 0..ssv_node_operator_signers.len() {
-                let signer = ssv_node_operator_signers.get(i).unwrap();
+                let signer = &ssv_node_operator_signers[i];
                 let ssv_node_operator_owner_address = signer.address();
                 info!(
                     "SSV node operator owner address: {}",
@@ -787,17 +826,23 @@ impl EthgasCommitService {
                             .query(&[("ownerAddress", ssv_node_operator_owner_address)])
                             .send()
                             .await?;
-                        
+
                         let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i]
                             .iter()
                             .map(|key| key.to_string())
                             .collect::<Vec<String>>()
                             .join(",");
 
-                        self.ssv_validator_register_response(res, &client, &access_jwt, pubkeys_str_list).await?;
-
+                        self.ssv_validator_register_response(
+                            res,
+                            &client,
+                            &access_jwt,
+                            pubkeys_str_list,
+                        )
+                        .await?;
                     } else {
-                        for (_counter, pubkey_chunk) in ssv_node_operator_owner_validator_pubkeys[i].chunks(35).enumerate() {
+                        for pubkey_chunk in ssv_node_operator_owner_validator_pubkeys[i].chunks(35)
+                        {
                             let pubkeys_chunk_list = pubkey_chunk
                                 .iter()
                                 .map(|key| key.to_string())
@@ -812,13 +857,16 @@ impl EthgasCommitService {
                                 .query(&[("publicKeys", pubkeys_chunk_list.clone())])
                                 .send()
                                 .await?;
-                            
-                            self.ssv_validator_register_response(res, &client, &access_jwt, pubkeys_chunk_list).await?;
 
+                            self.ssv_validator_register_response(
+                                res,
+                                &client,
+                                &access_jwt,
+                                pubkeys_chunk_list,
+                            )
+                            .await?;
                         }
-
                     };
-
                 } else {
                     exchange_api_url = Url::parse(&format!(
                         "{}{}",
@@ -835,9 +883,9 @@ impl EthgasCommitService {
                             .await?;
 
                         self.ssv_validator_deregister_response(res).await?;
-
                     } else {
-                        for (_counter, pubkey_chunk) in ssv_node_operator_owner_validator_pubkeys[i].chunks(35).enumerate() {
+                        for pubkey_chunk in ssv_node_operator_owner_validator_pubkeys[i].chunks(35)
+                        {
                             let pubkeys_chunk_list = pubkey_chunk
                                 .iter()
                                 .map(|key| key.to_string())
@@ -854,7 +902,6 @@ impl EthgasCommitService {
                                 .await?;
 
                             self.ssv_validator_deregister_response(res).await?;
-
                         }
                     };
                 }
@@ -873,8 +920,8 @@ impl EthgasCommitService {
                 &self.config.extra.obol_node_operator_owner_keystores,
                 &self.config.extra.obol_node_operator_owner_ledger_paths,
                 &self.config.extra.obol_node_operator_owner_validator_pubkeys,
-            ).await?;
-
+            )
+            .await?;
         } else if self.config.extra.registration_mode == "standard"
             || self.config.extra.registration_mode == "standard-mux"
         {
@@ -913,17 +960,16 @@ impl EthgasCommitService {
                         Some(api_validator_request_response_data_message) => {
                             let mut signatures = Vec::new();
                             if self.config.extra.enable_registration {
-                                if pubkeys.len() != 0 {
+                                if !pubkeys.is_empty() {
                                     info!("generating signatures for pubkeys...");
                                 }
-                                for i in 0..pubkeys.len() {
-                                    let pubkey = pubkeys[i];
+                                for pubkey in &pubkeys {
                                     let info = RegisteredInfo {
                                         eoa_address: api_validator_request_response_data_message
                                             .eoa_address,
                                     };
-                                    let request =
-                                        SignConsensusRequest::builder(pubkey).with_msg(&info);
+                                    let request = SignConsensusRequest::builder(pubkey.clone())
+                                        .with_msg(&info);
                                     // Request the signature from the signer client
                                     let signature = self
                                         .config
@@ -1000,30 +1046,42 @@ impl EthgasCommitService {
 
                                     match res.json::<APIValidatorVerifyBatchResponse>().await {
                                         Ok(res_json_verify) => {
-                                            let registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
-                                                .filter_map(|(key, verify_result)| {
-                                                    if verify_result.result == 0 {
-                                                        Some(*key)
-                                                    } else {
-                                                        None
-                                                    }
-                                                }).collect();
-                                            let previously_registered_keys: Vec<BlsPublicKey> = res_json_verify.data.iter()
-                                                .filter_map(|(key, verify_result)| {
-                                                    if verify_result.result == 3 {
-                                                        Some(*key)
-                                                    } else {
-                                                        None
-                                                    }
-                                                }).collect();
-                                            let keys_with_invalid_signature: Vec<BlsPublicKey> = res_json_verify.data.iter()
-                                                .filter_map(|(key, verify_result)| {
-                                                    if verify_result.result == 2 {
-                                                        Some(*key)
-                                                    } else {
-                                                        None
-                                                    }
-                                                }).collect();
+                                            let registered_keys: Vec<BlsPublicKey> =
+                                                res_json_verify
+                                                    .data
+                                                    .iter()
+                                                    .filter_map(|(key, verify_result)| {
+                                                        if verify_result.result == 0 {
+                                                            Some(key.to_owned())
+                                                        } else {
+                                                            None
+                                                        }
+                                                    })
+                                                    .collect();
+                                            let previously_registered_keys: Vec<BlsPublicKey> =
+                                                res_json_verify
+                                                    .data
+                                                    .iter()
+                                                    .filter_map(|(key, verify_result)| {
+                                                        if verify_result.result == 3 {
+                                                            Some(key.to_owned())
+                                                        } else {
+                                                            None
+                                                        }
+                                                    })
+                                                    .collect();
+                                            let keys_with_invalid_signature: Vec<BlsPublicKey> =
+                                                res_json_verify
+                                                    .data
+                                                    .iter()
+                                                    .filter_map(|(key, verify_result)| {
+                                                        if verify_result.result == 2 {
+                                                            Some(key.to_owned())
+                                                        } else {
+                                                            None
+                                                        }
+                                                    })
+                                                    .collect();
                                             if res_json_verify.success {
                                                 if !registered_keys.is_empty() {
                                                     if self.config.extra.enable_pricer {
@@ -1032,7 +1090,8 @@ impl EthgasCommitService {
                                                         info!("successful registration, you can now sell preconfs on ETHGas");
                                                     }
                                                     info!(number = registered_keys.len(), registered_validators = ?registered_keys);
-                                                    newly_registered_key_num += registered_keys.len();
+                                                    newly_registered_key_num +=
+                                                        registered_keys.len();
                                                 }
                                                 if !previously_registered_keys.is_empty() {
                                                     warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
@@ -1048,7 +1107,8 @@ impl EthgasCommitService {
                                                     &access_jwt,
                                                     self.config.extra.enable_ofac,
                                                     pubkeys_str,
-                                                ).await?;
+                                                )
+                                                .await?;
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
@@ -1122,26 +1182,35 @@ impl EthgasCommitService {
             get_registered_all_pubkeys(
                 &client,
                 self.config.extra.exchange_api_base.clone(),
-                &access_jwt
-            ).await?;
+                &access_jwt,
+            )
+            .await?;
 
             get_registered_ssv_pubkeys(
                 &client,
                 self.config.extra.exchange_api_base.clone(),
-                &access_jwt
-            ).await?;
+                &access_jwt,
+            )
+            .await?;
 
             get_registered_obol_pubkeys(
                 &client,
                 self.config.extra.exchange_api_base.clone(),
-                &access_jwt
-            ).await?;
+                &access_jwt,
+            )
+            .await?;
         }
 
         Ok(())
     }
 
-    async fn ssv_validator_register_response(&self, res: Response, client: &Client, access_jwt: &str, pubkeys_str_list: String) -> Result<()> {
+    async fn ssv_validator_register_response(
+        &self,
+        res: Response,
+        client: &Client,
+        access_jwt: &str,
+        pubkeys_str_list: String,
+    ) -> Result<()> {
         match res.json::<APISsvValidatorRegisterResponse>().await {
             Ok(result) => {
                 match result.success {
@@ -1159,10 +1228,10 @@ impl EthgasCommitService {
                                 info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
 
                                 update_ofac(
-                                    &client,
+                                    client,
                                     &self.config.extra.registration_mode,
                                     &self.config.extra.exchange_api_base,
-                                    &access_jwt,
+                                    access_jwt,
                                     self.config.extra.enable_ofac,
                                     pubkeys_str_list,
                                 ).await.map_err(|err| eyre::eyre!("failed to update OFAC status: {}", err))?;
@@ -1315,13 +1384,13 @@ async fn main() -> Result<()> {
                     };
                 }
 
-                let mux_pubkeys = match pbs_config.muxes {
+                let mux_pubkeys = match pbs_config.mux_lookup {
                     Some(mux_map) => {
                         let mut vec = Vec::new();
                         for (key, value) in mux_map.iter() {
                             for relay in value.relays.iter() {
                                 if relay.id.contains("ethgas") {
-                                    vec.push(BlsPublicKey::from(*key));
+                                    vec.push(BlsPublicKey::from(key.to_owned()));
                                     break;
                                 }
                             }

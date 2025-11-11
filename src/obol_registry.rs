@@ -1,18 +1,21 @@
+use crate::{models::KeystoreConfig, ofac::update_ofac};
 use alloy::{
     hex::encode,
-    primitives::{FixedBytes, B256, PrimitiveSignature},
-    signers::{local::PrivateKeySigner, Signer, ledger::{HDPath, LedgerSigner}, Error as SignerError},
+    primitives::{Signature, B256},
+    signers::{
+        ledger::{HDPath, LedgerSigner},
+        local::PrivateKeySigner,
+        Error as SignerError, Signer,
+    },
     sol,
-    sol_types::{eip712_domain, Eip712Domain, SolStruct},
+    sol_types::{eip712_domain, Eip712Domain},
 };
 use commit_boost::prelude::BlsPublicKey;
 use eyre::Result;
 use reqwest::{Client, Url};
-use std::{fs::File, error::Error, io::Write, env, str::FromStr, path::PathBuf};
-use tracing::{error, info, warn};
 use serde::{Deserialize, Serialize};
-use chrono::Local;
-use crate::{ofac::update_ofac, models::KeystoreConfig};
+use std::{env, error::Error, str::FromStr};
+use tracing::{error, info, warn};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,7 +39,6 @@ struct Eip712MessageObol {
     message: MessageObol,
     domain: Domain,
 }
-
 
 #[derive(Debug, Deserialize)]
 struct APIObolNodeOperatorRegisterResponse {
@@ -104,7 +106,11 @@ impl ObolSigner {
         }
     }
 
-    pub async fn sign_typed_data(&self, message: &data, domain: &Eip712Domain) -> Result<PrimitiveSignature, SignerError> {
+    pub async fn sign_typed_data(
+        &self,
+        message: &data,
+        domain: &Eip712Domain,
+    ) -> Result<Signature, SignerError> {
         match self {
             ObolSigner::Ledger(signer) => signer.sign_typed_data(message, domain).await,
             ObolSigner::PrivateKey(signer) => signer.sign_typed_data(message, domain).await,
@@ -126,7 +132,6 @@ async fn generate_eip712_signature_for_obol(
     eip712_message_str: &str,
     signer: &ObolSigner,
 ) -> Result<String> {
-
     let eip712_message: Eip712MessageObol = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
 
@@ -161,147 +166,171 @@ pub async fn register_obol_keys(
     config_extra_obol_node_operator_owner_ledger_paths: &Option<Vec<String>>,
     config_extra_obol_node_operator_owner_validator_pubkeys: &Option<Vec<Vec<BlsPublicKey>>>,
 ) -> Result<(), Box<dyn Error>> {
-    let obol_node_operator_owner_validator_pubkeys = match config_extra_obol_node_operator_owner_validator_pubkeys {
-        Some(validator_pubkeys) => validator_pubkeys.clone(),
-        None => {
-            return Err(std::io::Error::other(
-                "obol_node_operator_owner_validator_pubkeys cannot be empty",
-            )
-            .into())
-        }
-    };
-    let obol_node_operator_signers: Vec<ObolSigner> = match config_extra_obol_node_operator_owner_mode {
-        Some(mode) => match mode.as_str() {
-            "key" => {
-                let obol_node_operator_owner_signing_keys = match config_extra_obol_node_operator_owner_signing_keys {
-                    Some(signing_keys) => signing_keys.clone(),
-                    None => match env::var("OBOL_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
-                        Ok(signing_keys_str) => signing_keys_str
-                            .split(',')
-                            .filter(|s| !s.trim().is_empty())
-                            .map(|key| {
-                                B256::from_str(key.trim()).map_err(|_| {
-                                    std::io::Error::new(
-                                        std::io::ErrorKind::InvalidData,
-                                        "Invalid signing key format".to_string(),
+    let obol_node_operator_owner_validator_pubkeys =
+        match config_extra_obol_node_operator_owner_validator_pubkeys {
+            Some(validator_pubkeys) => validator_pubkeys.clone(),
+            None => {
+                return Err(std::io::Error::other(
+                    "obol_node_operator_owner_validator_pubkeys cannot be empty",
+                )
+                .into())
+            }
+        };
+    let obol_node_operator_signers: Vec<ObolSigner> =
+        match config_extra_obol_node_operator_owner_mode {
+            Some(mode) => match mode.as_str() {
+                "key" => {
+                    let obol_node_operator_owner_signing_keys =
+                        match config_extra_obol_node_operator_owner_signing_keys {
+                            Some(signing_keys) => signing_keys.clone(),
+                            None => match env::var("OBOL_NODE_OPERATOR_OWNER_SIGNING_KEYS") {
+                                Ok(signing_keys_str) => signing_keys_str
+                                    .split(',')
+                                    .filter(|s| !s.trim().is_empty())
+                                    .map(|key| {
+                                        B256::from_str(key.trim()).map_err(|_| {
+                                            std::io::Error::new(
+                                                std::io::ErrorKind::InvalidData,
+                                                "Invalid signing key format".to_string(),
+                                            )
+                                        })
+                                    })
+                                    .collect::<Result<Vec<B256>, _>>()?,
+                                Err(_) => {
+                                    return Err(std::io::Error::other(
+                                        "obol_node_operator_owner_signing_keys cannot be empty",
                                     )
-                                })
-                            })
-                            .collect::<Result<Vec<B256>, _>>()?,
-                        Err(_) => {
-                            return Err(std::io::Error::other(
-                                "obol_node_operator_owner_signing_keys cannot be empty",
-                            )
-                            .into());
-                        }
-                    },
-                };
-                if obol_node_operator_owner_signing_keys.is_empty() {
+                                    .into());
+                                }
+                            },
+                        };
+                    if obol_node_operator_owner_signing_keys.is_empty() {
                         return Err(std::io::Error::other(
                             "obol_node_operator_owner_signing_keys cannot be empty",
-                    )
-                    .into());
-                };
+                        )
+                        .into());
+                    };
 
-                let mut operator_signers = Vec::new();
-                for key_byte in obol_node_operator_owner_signing_keys {
-                    let signer = PrivateKeySigner::from_bytes(&key_byte)
-                        .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-                    operator_signers.push(ObolSigner::PrivateKey(signer));
-                }
-                operator_signers
-            }
-            "keystore" => {
-                let operator_signers: Vec<ObolSigner> = match config_extra_obol_node_operator_owner_keystores {
-                    Some(keystores) => {
-                        let mut operator_signers = Vec::new();
-                        for keystore in keystores {
-                            let password = std::fs::read_to_string(&keystore.password_path)?;
-                            let signer = PrivateKeySigner::decrypt_keystore(&keystore.keystore_path, password.trim())
-                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-                            operator_signers.push(ObolSigner::PrivateKey(signer));
-                        }
-                        operator_signers
-
+                    let mut operator_signers = Vec::new();
+                    for key_byte in obol_node_operator_owner_signing_keys {
+                        let signer = PrivateKeySigner::from_bytes(&key_byte)
+                            .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                        operator_signers.push(ObolSigner::PrivateKey(signer));
                     }
-                    None => {
-                        let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORES");
-                        let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSOWRDS");
-
-                        match (keystore_paths, password_paths) {
-                            (Ok(keystore_paths), Ok(password_paths)) => {
-                                let keystore_paths = keystore_paths
-                                    .split(',')
-                                    .filter(|s| !s.trim().is_empty())
-                                    .collect::<Vec<_>>();
-                                let password_paths = password_paths
-                                    .split(',')
-                                    .filter(|s| !s.trim().is_empty())
-                                    .collect::<Vec<_>>();
-
-                                if keystore_paths.len() != password_paths.len() {
-                                    return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORES & OBOL_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
-                                }
-
+                    operator_signers
+                }
+                "keystore" => {
+                    let operator_signers: Vec<ObolSigner> =
+                        match config_extra_obol_node_operator_owner_keystores {
+                            Some(keystores) => {
                                 let mut operator_signers = Vec::new();
-                                for (keystore_path, password_path) in keystore_paths.iter().zip(password_paths.iter()) {
-                                    let password = std::fs::read_to_string(password_path)?;
-                                    let signer = PrivateKeySigner::decrypt_keystore(keystore_path, password.trim())
-                                        .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                                for keystore in keystores {
+                                    let password =
+                                        std::fs::read_to_string(&keystore.password_path)?;
+                                    let private_key = eth_keystore::decrypt_key(
+                                        &keystore.keystore_path,
+                                        password,
+                                    )
+                                    .map_err(|e| eyre::eyre!("Failed to read keystore: {}", e))?;
+                                    let signer = PrivateKeySigner::from_slice(&private_key)
+                                        .map_err(|e| {
+                                            eyre::eyre!("Failed to create signer: {}", e)
+                                        })?;
                                     operator_signers.push(ObolSigner::PrivateKey(signer));
                                 }
                                 operator_signers
-
                             }
-                            _ => {
+                            None => {
+                                let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORES");
+                                let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSOWRDS");
+
+                                match (keystore_paths, password_paths) {
+                                    (Ok(keystore_paths), Ok(password_paths)) => {
+                                        let keystore_paths = keystore_paths
+                                            .split(',')
+                                            .filter(|s| !s.trim().is_empty())
+                                            .collect::<Vec<_>>();
+                                        let password_paths = password_paths
+                                            .split(',')
+                                            .filter(|s| !s.trim().is_empty())
+                                            .collect::<Vec<_>>();
+
+                                        if keystore_paths.len() != password_paths.len() {
+                                            return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORES & OBOL_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                        }
+
+                                        let mut operator_signers = Vec::new();
+                                        for (keystore_path, password_path) in
+                                            keystore_paths.iter().zip(password_paths.iter())
+                                        {
+                                            let password = std::fs::read_to_string(password_path)?;
+                                            let signer = PrivateKeySigner::decrypt_keystore(
+                                                keystore_path,
+                                                password.trim(),
+                                            )
+                                            .map_err(|e| {
+                                                eyre::eyre!("Failed to create signer: {}", e)
+                                            })?;
+                                            operator_signers.push(ObolSigner::PrivateKey(signer));
+                                        }
+                                        operator_signers
+                                    }
+                                    _ => {
+                                        return Err(std::io::Error::other(
+                                            "obol_node_operator_owner_keystores cannot be empty",
+                                        )
+                                        .into());
+                                    }
+                                }
+                            }
+                        };
+                    operator_signers
+                }
+                "ledger" => {
+                    let obol_node_operator_owner_ledger_paths =
+                        match config_extra_obol_node_operator_owner_ledger_paths {
+                            Some(paths) => paths.clone(),
+                            None => {
                                 return Err(std::io::Error::other(
-                                    "obol_node_operator_owner_keystores cannot be empty",
+                                    "obol_node_operator_owner_ledger_paths cannot be empty",
                                 )
-                                .into());
+                                .into())
                             }
-                        }
-                    }
-                };
-                operator_signers
-
-            }
-            "ledger" => {
-                let obol_node_operator_owner_ledger_paths = match config_extra_obol_node_operator_owner_ledger_paths {
-                    Some(paths) => paths.clone(),
-                    None => return Err(std::io::Error::other(
-                        "obol_node_operator_owner_ledger_paths cannot be empty",
-                    )
-                    .into()),
-                };
-                if obol_node_operator_owner_ledger_paths.len() != 1 {
-                    return Err(std::io::Error::other(
+                        };
+                    if obol_node_operator_owner_ledger_paths.len() != 1 {
+                        return Err(std::io::Error::other(
                         "obol_node_operator_owner_ledger_paths cannot be empty or more than 1 path",
                     )
                     .into());
-                };
+                    };
 
-                let mut operator_signers = Vec::new();
-                for path in obol_node_operator_owner_ledger_paths {
-                    let signer = LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
-                    operator_signers.push(ObolSigner::Ledger(signer));
+                    let mut operator_signers = Vec::new();
+                    for path in obol_node_operator_owner_ledger_paths {
+                        let signer =
+                            LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
+                        operator_signers.push(ObolSigner::Ledger(signer));
+                    }
+                    operator_signers
                 }
-                operator_signers
+                _ => {
+                    return Err(
+                        std::io::Error::other("Unsupported obol_node_operator_owner_mode").into(),
+                    );
+                }
+            },
+            None => {
+                return Err(
+                    std::io::Error::other("obol_node_operator_owner_mode cannot be empty").into(),
+                );
             }
-            _ => {
-                return Err(std::io::Error::other("Unsupported obol_node_operator_owner_mode").into());
-            }
-        }
-        None => {
-            return Err(std::io::Error::other("obol_node_operator_owner_mode cannot be empty").into());
-        }
-    };
+        };
 
     if obol_node_operator_signers.len() != obol_node_operator_owner_validator_pubkeys.len() {
         return Err(std::io::Error::other("obol_node_operator_owner_signing_keys & obol_node_operator_owner_validator_pubkeys should have same array length").into());
     }
 
     for i in 0..obol_node_operator_signers.len() {
-        let signer = obol_node_operator_signers.get(i).unwrap();
+        let signer = &obol_node_operator_signers[i];
         let obol_node_operator_owner_address = signer.address();
         info!(
             "Obol node operator owner address: {}",
@@ -332,7 +361,10 @@ pub async fn register_obol_keys(
                     result
                 }
                 false => {
-                    return Err(std::io::Error::other("failed to get the Obol node operator registration message for signing").into());
+                    return Err(std::io::Error::other(
+                        "failed to get the Obol node operator registration message for signing",
+                    )
+                    .into());
                 }
             },
             Err(err) => {
@@ -419,8 +451,7 @@ pub async fn register_obol_keys(
             warn!("it may take up to 30 seconds to register all Obol validator pubkeys if there are many pubkeys");
             exchange_api_url = Url::parse(&format!(
                 "{}{}",
-                config_extra_exchange_api_base,
-                "/api/v1/user/obol/operator/validator/register"
+                config_extra_exchange_api_base, "/api/v1/user/obol/operator/validator/register"
             ))?;
             res = if obol_node_operator_owner_validator_pubkeys[i].is_empty() {
                 client
@@ -459,7 +490,7 @@ pub async fn register_obol_keys(
                                     info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
 
                                     update_ofac(
-                                        &client,
+                                        client,
                                         config_extra_registration_mode,
                                         config_extra_exchange_api_base,
                                         access_jwt,
@@ -481,8 +512,7 @@ pub async fn register_obol_keys(
         } else {
             exchange_api_url = Url::parse(&format!(
                 "{}{}",
-                config_extra_exchange_api_base,
-                "/api/v1/user/obol/operator/validator/deregister"
+                config_extra_exchange_api_base, "/api/v1/user/obol/operator/validator/deregister"
             ))?;
             res = if obol_node_operator_owner_validator_pubkeys[i].is_empty() {
                 client
