@@ -1,7 +1,7 @@
 ## Overview
 First and foremost, we would like to give a big shout out to the Commit-Boost team for making Ethereum a more open and cooperative environment! This repo allows you to run all Commit-Boost components related to ETHGas in Docker. There are 3 main components, i.e.
 * `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
-* `cb_signer`: It securely generates signatures from the validator BLS private keys. If you want to onboard DVT validators, you don't need this component.
+* `cb_signer`: It securely generates signatures from the validator BLS private keys. If you use remote signer or want to onboard DVT validators, you don't need this component.
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 ![Architecture](./architecture.png)
 * For more details on ETHGas architecture, please refer to [here](https://docs.ethgas.com/our-technology/the-ethgas-architecture)
@@ -57,7 +57,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * mount the correct validator keystore directories from the host machine to the container `/keys` and `/secrets` directory
 
 ## Start the Signer module
-* For registration of non-DVT validators, run `docker compose -f docker-compose.yml up cb_signer`
+* For registration of non-DVT validators, run `docker compose -f docker-compose.yml up cb_signer`. For DVT validators or remote signer, you don't need to run this module
     * if your signer starts successfully, you should see the log similar to `INFO Starting signing service version="0.8.0" commit_hash="f51f5bd61831fde943057b29ffd6e26e7eb23765" modules=["ETHGAS_COMMIT"] endpoint=0.0.0.0:20000 loaded_consensus=100 loaded_proxies=0` where `loaded_consensus` indicates the total number of loaded keys
 
 ## Start the ETHGas Commit module
