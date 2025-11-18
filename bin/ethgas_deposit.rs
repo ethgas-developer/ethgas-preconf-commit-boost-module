@@ -214,9 +214,10 @@ impl EthgasExchangeService {
             .await?;
 
         let res_json_login = res.json::<APILoginResponse>().await?;
-        
-        let eip712_message: Eip712Message = serde_json::from_str(&res_json_login.data.eip712_message)
-            .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+
+        let eip712_message: Eip712Message =
+            serde_json::from_str(&res_json_login.data.eip712_message)
+                .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
         let eip712_domain_from_api = eip712_message.domain;
         let eip712_sub_message = eip712_message.message;
         let domain = eip712_domain! {
@@ -266,7 +267,7 @@ impl EthgasDepositService {
         let wallet = EthereumWallet::from(signer);
         let provider = ProviderBuilder::new()
             .wallet(wallet)
-            .on_http(self.rpc_url.clone());
+            .connect_http(self.rpc_url.clone());
         const ABI: &str = r#"[{
             "inputs": [{
                 "components": [
