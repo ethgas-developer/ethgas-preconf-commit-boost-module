@@ -664,13 +664,15 @@ impl EthgasCommitService {
                                             keystore_paths.iter().zip(password_paths.iter())
                                         {
                                             let password = std::fs::read_to_string(password_path)?;
-                                            let signer = PrivateKeySigner::decrypt_keystore(
+                                            let private_key = eth_keystore::decrypt_key(
                                                 keystore_path,
                                                 password.trim(),
                                             )
-                                            .map_err(|e| {
-                                                eyre::eyre!("Failed to create signer: {}", e)
-                                            })?;
+                                            .map_err(|e| eyre::eyre!("Failed to read keystore: {}", e))?;
+                                            let signer = PrivateKeySigner::from_slice(&private_key)
+                                                .map_err(|e| {
+                                                    eyre::eyre!("Failed to create signer: {}", e)
+                                                })?;
                                             operator_signers.push(SSVSigner::PrivateKey(signer));
                                         }
                                         operator_signers
@@ -733,7 +735,8 @@ impl EthgasCommitService {
 
             for i in 0..ssv_node_operator_signers.len() {
                 let signer = &ssv_node_operator_signers[i];
-                let ssv_node_operator_owner_address = signer.address();
+                // let ssv_node_operator_owner_address = signer.address();
+                let ssv_node_operator_owner_address = "0xaA184b86B4cdb747F4A3BF6e6FCd5e27c1d92c5c";
                 info!(
                     "SSV node operator owner address: {}",
                     ssv_node_operator_owner_address
