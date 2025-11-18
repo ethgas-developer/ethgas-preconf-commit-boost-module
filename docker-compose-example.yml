@@ -1,6 +1,6 @@
 services:
   cb_pbs:
-    image: ghcr.io/commit-boost/pbs:v0.8.1-rc.4
+    image: ghcr.io/commit-boost/pbs:v0.9.2
     container_name: cb_pbs
     ports:
     - 18550:18550
@@ -17,7 +17,7 @@ services:
     networks:
     - monitoring_network
   cb_gen_jwt:
-    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:v1.0.1
+    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:v1.0.2
     container_name: cb_gen_jwt
     environment:
       CB_MODULE_ID: ETHGAS_COMMIT
@@ -26,7 +26,7 @@ services:
     networks:
     - monitoring_network
   cb_signer:
-    image: ghcr.io/commit-boost/signer:v0.8.1-rc.4
+    image: ghcr.io/commit-boost/signer:v0.9.2
     container_name: cb_signer
     environment:
       CB_CONFIG: /cb-config.toml
@@ -52,7 +52,7 @@ services:
     networks:
     - signer_network
   cb_ethgas_commit:
-    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.1
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.2
     container_name: cb_ethgas_commit
     environment:
       CB_MODULE_ID: ETHGAS_COMMIT

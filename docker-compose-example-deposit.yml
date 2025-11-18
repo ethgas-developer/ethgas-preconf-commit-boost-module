@@ -1,6 +1,6 @@
 services:
   cb_ethgas_deposit:
-    image: ghcr.io/ethgas-developer/commitboost_ethgas_deposit:v1.0.1
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_deposit:v1.0.2
     container_name: cb_ethgas_deposit
     environment:
       CB_MODULE_ID: ETHGAS_DEPOSIT

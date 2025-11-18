@@ -2,7 +2,7 @@
 # Some fields are optional and can be omitted, in which case the default value, if present, will be used.
 
 # Chain spec ID. Supported values:
-# A network ID. Supported values: Mainnet, Holesky, Sepolia, Helder, Hoodi.
+# A network ID. Supported values: Mainnet, Holesky, Sepolia, Helder, Hoodi. Lower case values e.g. "mainnet" are also accepted
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
 chain = "Mainnet" # this affect BUILDER_DOMAIN used in signing data root hash
@@ -49,12 +49,31 @@ min_bid_eth = 0.0
 # to force local building and miniminzing the risk of missed slots. See also the timing games section below
 # OPTIONAL, DEFAULT: 2000
 late_in_slot_time_ms = 2000
-# Whether to enable extra validation of get_header responses, if this is enabled you need to set `rpc_url`
+# Whether to enable extra validation of get_header responses, if this is enabled `rpc_url` must also be set
 # OPTIONAL, DEFAULT: false
 extra_validation_enabled = false
 # Execution Layer RPC url to use for extra validation
 # OPTIONAL
 rpc_url = "https://ethereum-rpc.publicnode.com"
+# URL of the SSV API server to use, if you have a mux that targets an SSV node operator
+# OPTIONAL, DEFAULT: "https://api.ssv.network/api/v4"
+# ssv_api_url = "https://api.ssv.network/api/v4"
+# Timeout for any HTTP requests sent from the PBS module to other services, in seconds
+# OPTIONAL, DEFAULT: 10
+http_timeout_seconds = 10
+# Maximum number of retries for validator registrations per relay
+# OPTIONAL, DEFAULT: 3
+register_validator_retry_limit = 3
+# Maximum number of validators to register in a single request.
+# OPTIONAL, DEFAULT: "" (unlimited)
+validator_registration_batch_size = ""
+# For any Registry-based Mux configurations that have dynamic pubkey
+# refreshing enabled, this is how often to refresh the list of pubkeys
+# from the registry, in seconds. Enabling registry refreshing is done per-mux
+# with the mux's `enable_refreshing` property. If none of the muxes have it
+# enabled, this value will not be used.
+# OPTIONAL, DEFAULT: 384
+mux_registry_refresh_interval_seconds = 384
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
@@ -185,6 +204,12 @@ host = "0.0.0.0"
 # Port to listen for Signer API calls on
 # OPTIONAL, DEFAULT: 20000
 port = 20000
+# Number of JWT authentication attempts a client can fail before blocking that client temporarily from Signer access
+# OPTIONAL, DEFAULT: 3
+jwt_auth_fail_limit = 3
+# How long to block a client from Signer access, in seconds, if it failed JWT authentication too many times
+# OPTIONAL, DEFAULT: 300
+jwt_auth_fail_timeout_seconds = 300
 
 # For Remote signer:
 # [signer.remote]
@@ -210,12 +235,12 @@ port = 20000
 # Complete URL of a Dirk gateway
 # url = "https://localhost:8881"
 # Wallets to load consensus keys from
-# wallets = ["Wallet1", "DistributedWallet"]
+# accounts = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
 # server_name = "localhost-2"
 # url = "https://localhost:8882"
-# wallets = ["Wallet2", "DistributedWallet"]
+# accounts = ["Wallet2", "DistributedWallet"]
 
 # Configuration for how the Signer module should store proxy delegations.
 # OPTIONAL
@@ -232,16 +257,18 @@ port = 20000
 # ValidatorsDir: format of the keystore (lighthouse, prysm, teku or lodestar)
 format = "lighthouse"
 # ValidatorsDir: full path to the keys directory
-# For lighthouse, it's de path to the directory where the `<pubkey>/voting-keystore.json` directories are located.
+# For lighthouse, it's the path to the directory where the `<pubkey>` directories are located, under each of which is a `voting-keystore.json` file.
 # For prysm, it's the path to the `all-accounts.keystore.json` file.
 # For teku, it's the path to the directory where all `<pubkey>.json` files are located.
 # For lodestar, it's the path to the directory where all `<pubkey>.json` files are located.
+# For nimbus, it's the path to the directory where the `<pubkey>` directories are located, under each of which is a `keystore.json` file.
 keys_path = "/path/to/data_validator/validators"
 # ValidatorsDir: full path to the secrets file/directory
-# For lighthouse, it's de path to the directory where the `<pubkey>.json` files are located.
+# For lighthouse, it's the path to the directory where the `<pubkey>` files are located.
 # For prysm, it's the path to the file containing the wallet decryption password.
 # For teku, it's the path to the directory where all `<pubkey>.txt` files are located.
 # For lodestar, it's the path to the file containing the decryption password.
+# For nimbus, it's the path to the directory where the `<pubkey>` files are located.
 secrets_path = "/path/to/data_validator/secrets"
 # Configuration for how the Signer module should store proxy delegations. Supported types of store are:
 #   - File: store keys and delegations from a plain text file (unsafe, use only for testing purposes)
