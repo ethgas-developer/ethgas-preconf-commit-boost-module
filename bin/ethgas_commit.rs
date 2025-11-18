@@ -81,6 +81,8 @@ struct ExtraConfig {
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
     ssv_node_operator_owner_keystores: Option<Vec<KeystoreConfig>>,
     ssv_node_operator_owner_ledger_paths: Option<Vec<String>>,
+    ssv_node_operator_owner_tx_hashes:  Option<Vec<String>>,
+    ssv_node_operator_owner_tx_from_addr: Option<Vec<alloy::primitives::Address>>,
     ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
     obol_node_operator_owner_mode: Option<String>,
     obol_node_operator_owner_signing_keys: Option<Vec<B256>>,
@@ -230,6 +232,13 @@ struct APISsvNodeOperatorRegisterResponse {
 struct APISsvNodeOperatorRegisterResponseData {
     available: bool,
     message_to_sign: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct APISsvNodeOperatorVerifyByTxResponse {
+    success: bool,
+    error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -570,6 +579,8 @@ impl EthgasCommitService {
                         .into())
                     }
                 };
+            let mut ssv_node_operator_owner_tx_hashes: Vec<String> = Vec::new();
+            let mut ssv_node_operator_owner_tx_from_addr: Vec<alloy::primitives::Address> = Vec::new();
             let ssv_node_operator_signers: Vec<SSVSigner> = match &self
                 .config
                 .extra
@@ -714,6 +725,53 @@ impl EthgasCommitService {
                         }
                         operator_signers
                     }
+                    "tx" => {
+                        ssv_node_operator_owner_tx_hashes =
+                            match &self.config.extra.ssv_node_operator_owner_tx_hashes {
+                                Some(tx_hashes) => tx_hashes.clone(),
+                                None => {
+                                    return Err(std::io::Error::other(
+                                        "ssv_node_operator_owner_tx_hashes cannot be empty",
+                                    )
+                                    .into())
+                                },
+                            };
+                        if ssv_node_operator_owner_tx_hashes.is_empty() {
+                            return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_tx_hashes cannot be empty",
+                            )
+                            .into());
+                        };
+                        ssv_node_operator_owner_tx_from_addr =
+                            match &self.config.extra.ssv_node_operator_owner_tx_from_addr {
+                                Some(from_addr) => from_addr.clone(),
+                                None => {
+                                    return Err(std::io::Error::other(
+                                        "ssv_node_operator_owner_tx_from_addr cannot be empty",
+                                    )
+                                    .into())
+                                },
+                            };
+                        if ssv_node_operator_owner_tx_from_addr.is_empty() {
+                            return Err(std::io::Error::other(
+                                "ssv_node_operator_owner_tx_from_addr cannot be empty",
+                            )
+                            .into());
+                        };
+
+                        if ssv_node_operator_owner_tx_hashes.len() != ssv_node_operator_owner_tx_from_addr.len() {
+                            return Err(std::io::Error::other("ssv_node_operator_owner_tx_hashes & ssv_node_operator_owner_tx_from_addr should have the same array length").into());
+                        }
+
+                        let mut operator_signers = Vec::new();
+                        for _tx_hash in &ssv_node_operator_owner_tx_hashes {
+                            // as placeholder signers
+                            let signer = PrivateKeySigner::from_bytes(&FixedBytes::<32>::from([1u8; 32]))
+                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                        }
+                        operator_signers
+                    }
                     _ => {
                         return Err(std::io::Error::other(
                             "Unsupported ssv_node_operator_owner_mode",
@@ -734,81 +792,130 @@ impl EthgasCommitService {
             }
 
             for i in 0..ssv_node_operator_signers.len() {
-                let signer = &ssv_node_operator_signers[i];
-                let ssv_node_operator_owner_address = signer.address();
-                info!(
-                    "SSV node operator owner address: {}",
-                    ssv_node_operator_owner_address
-                );
+                let ssv_node_operator_owner_address: alloy::primitives::Address;
 
-                exchange_api_url = Url::parse(&format!(
-                    "{}{}",
-                    self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/register"
-                ))?;
-                res = client
-                    .post(exchange_api_url.to_string())
-                    .header("Authorization", format!("Bearer {}", access_jwt))
-                    .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                    .send()
-                    .await?;
-
-                let res_json_ssv_node_operator_register = match res
-                    .json::<APISsvNodeOperatorRegisterResponse>()
-                    .await
-                {
-                    Ok(result) => match result.success {
-                        true => {
-                            if !result.data.available {
-                                warn!("ssv node operator owner address has been registered");
-                            }
-                            result
-                        }
-                        false => {
-                            return Err(std::io::Error::other("failed to get the SSV node operator registration message for signing").into());
-                        }
-                    },
-                    Err(err) => {
-                        return Err(std::io::Error::other(format!("failed to call the API to get the SSV node operator registration message for signing: {}", err)).into());
-                    }
-                };
-                if res_json_ssv_node_operator_register.data.available {
-                    let signature_hex = generate_eip712_signature_for_ssv(
-                        &res_json_ssv_node_operator_register
-                            .data
-                            .message_to_sign
-                            .unwrap_or_default(),
-                        signer,
-                    )
-                    .await?;
+                if self.config.extra.ssv_node_operator_owner_mode.clone().unwrap_or_default() == "tx" {
+                    ssv_node_operator_owner_address = ssv_node_operator_owner_tx_from_addr[i];
+                    info!(
+                        "SSV node operator owner address: {}",
+                        ssv_node_operator_owner_address
+                    );
                     exchange_api_url = Url::parse(&format!(
                         "{}{}",
-                        self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verify"
+                        self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verifyByTx"
                     ))?;
                     res = client
                         .post(exchange_api_url.to_string())
                         .header("User-Agent", "cb_ethgas_commit")
                         .header("Authorization", format!("Bearer {}", access_jwt))
                         .query(&[("ownerAddress", ssv_node_operator_owner_address)])
-                        .query(&[("signature", signature_hex)])
+                        .query(&[("txHash", ssv_node_operator_owner_tx_hashes[i].clone())])
                         .query(&[("autoImport", false)])
                         .query(&[("sync", false)])
                         .send()
                         .await?;
 
-                    match res.json::<APISsvNodeOperatorVerifyResponse>().await {
+                    match res.json::<APISsvNodeOperatorVerifyByTxResponse>().await {
                         Ok(result) => match result.success {
                             true => {
                                 info!("successfully registered ssv node operator owner address");
                             }
                             false => {
-                                error!(
-                                    "failed to register ssv node operator owner address: {}",
-                                    result.error_msg_key.unwrap_or_default()
+                                if result.error_msg_key.clone().unwrap_or_default() == "error.ssv.operator.registered" {
+                                    warn!(
+                                        "ssv node operator owner address has been registered"
                                 );
+                                } else {
+                                    error!(
+                                        "failed to register ssv node operator owner address: {}",
+                                        result.error_msg_key.unwrap_or_default()
+                                    );
+                                }
+
                             }
                         },
                         Err(err) => {
-                            error!(?err, "failed to call ssv operator verify API");
+                            error!(?err, "failed to call ssv operator verify by tx API");
+                        }
+                    }
+
+                } else {
+                    let signer = &ssv_node_operator_signers[i];
+                    ssv_node_operator_owner_address = signer.address();
+                    info!(
+                        "SSV node operator owner address: {}",
+                        ssv_node_operator_owner_address
+                    );
+
+                    exchange_api_url = Url::parse(&format!(
+                        "{}{}",
+                        self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/register"
+                    ))?;
+                    res = client
+                        .post(exchange_api_url.to_string())
+                        .header("Authorization", format!("Bearer {}", access_jwt))
+                        .query(&[("ownerAddress", ssv_node_operator_owner_address)])
+                        .send()
+                        .await?;
+
+                    let res_json_ssv_node_operator_register = match res
+                        .json::<APISsvNodeOperatorRegisterResponse>()
+                        .await
+                    {
+                        Ok(result) => match result.success {
+                            true => {
+                                if !result.data.available {
+                                    warn!("ssv node operator owner address has been registered");
+                                }
+                                result
+                            }
+                            false => {
+                                return Err(std::io::Error::other("failed to get the SSV node operator registration message for signing").into());
+                            }
+                        },
+                        Err(err) => {
+                            return Err(std::io::Error::other(format!("failed to call the API to get the SSV node operator registration message for signing: {}", err)).into());
+                        }
+                    };
+                    if res_json_ssv_node_operator_register.data.available {
+                        let signature_hex = generate_eip712_signature_for_ssv(
+                            &res_json_ssv_node_operator_register
+                                .data
+                                .message_to_sign
+                                .unwrap_or_default(),
+                            signer,
+                        )
+                        .await?;
+                        exchange_api_url = Url::parse(&format!(
+                            "{}{}",
+                            self.config.extra.exchange_api_base, "/api/v1/user/ssv/operator/verify"
+                        ))?;
+                        res = client
+                            .post(exchange_api_url.to_string())
+                            .header("User-Agent", "cb_ethgas_commit")
+                            .header("Authorization", format!("Bearer {}", access_jwt))
+                            .query(&[("ownerAddress", ssv_node_operator_owner_address)])
+                            .query(&[("signature", signature_hex)])
+                            .query(&[("autoImport", false)])
+                            .query(&[("sync", false)])
+                            .send()
+                            .await?;
+
+                        match res.json::<APISsvNodeOperatorVerifyResponse>().await {
+                            Ok(result) => match result.success {
+                                true => {
+                                    info!("successfully registered ssv node operator owner address");
+                                }
+                                false => {
+                                    error!(
+                                        "failed to register ssv node operator owner address: {}",
+                                        result.error_msg_key.unwrap_or_default()
+                                    );
+                                }
+                            },
+                            Err(err) => {
+                                error!(?err, "failed to call ssv operator verify API");
+                            }
                         }
                     }
                 }
