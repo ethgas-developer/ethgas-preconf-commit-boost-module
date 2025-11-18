@@ -735,8 +735,7 @@ impl EthgasCommitService {
 
             for i in 0..ssv_node_operator_signers.len() {
                 let signer = &ssv_node_operator_signers[i];
-                // let ssv_node_operator_owner_address = signer.address();
-                let ssv_node_operator_owner_address = "0xaA184b86B4cdb747F4A3BF6e6FCd5e27c1d92c5c";
+                let ssv_node_operator_owner_address = signer.address();
                 info!(
                     "SSV node operator owner address: {}",
                     ssv_node_operator_owner_address
