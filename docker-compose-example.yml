@@ -17,7 +17,7 @@ services:
     networks:
     - monitoring_network
   cb_gen_jwt:
-    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:v1.0.2
+    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:v1.0.3
     container_name: cb_gen_jwt
     environment:
       CB_MODULE_ID: ETHGAS_COMMIT
@@ -52,7 +52,7 @@ services:
     networks:
     - signer_network
   cb_ethgas_commit:
-    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.2
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.3
     container_name: cb_ethgas_commit
     environment:
       CB_MODULE_ID: ETHGAS_COMMIT
