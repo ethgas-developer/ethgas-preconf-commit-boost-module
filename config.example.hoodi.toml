@@ -273,7 +273,7 @@ enable_pricer = true
 enable_builder = false
 enable_ofac = false
 collateral_per_slot = "0"
-builder_pubkey = "0x000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+builder_pubkey = "0x94a076b27f294dc44b9fd44d8e2b063fb129bc85ed047da1cefb82d16e1a13e6b50de31a86f5b233d1e6bbaca3c69173" # Titan, you could change it to any other registered builder pubkey
 is_jwt_provided = false
 query_pubkey = true
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
