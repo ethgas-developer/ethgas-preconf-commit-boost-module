@@ -215,6 +215,9 @@ jwt_auth_fail_timeout_seconds = 300
 # [signer.remote]
 # URL of the Web3Signer instance
 # url = "https://remote.signer.url"
+# both cert & key have to be in PEM format
+# cert_path = "/path/to/client.crt"
+# key_path = "/path/to/client.key"
 # For Dirk signer:
 # [signer.dirk]
 # Path to the client certificate to authenticate with Dirk
