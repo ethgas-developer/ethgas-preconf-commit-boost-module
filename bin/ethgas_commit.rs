@@ -18,6 +18,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
+    utils::update_payout_address
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -71,6 +72,7 @@ struct ExtraConfig {
     enable_builder: bool,
     enable_ofac: bool,
     collateral_per_slot: String,
+    payout_address: Option<alloy::primitives::Address>,
     builder_pubkey: BlsPublicKey,
     is_jwt_provided: bool,
     query_pubkey: bool,
@@ -566,6 +568,16 @@ impl EthgasCommitService {
             Err(err) => {
                 error!(?err, "failed to call validator collateral setting API");
             }
+        }
+
+        if let Some(payout_address) = self.config.extra.payout_address {
+            update_payout_address(
+                &client,
+                &self.config.extra.exchange_api_base,
+                &access_jwt,
+                payout_address,
+            )
+            .await?;
         }
 
         if self.config.extra.registration_mode == "ssv" {
