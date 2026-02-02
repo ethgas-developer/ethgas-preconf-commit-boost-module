@@ -1,6 +1,6 @@
 ## Overview
 First and foremost, we would like to give a big shout out to the Commit-Boost team for making Ethereum a more open and cooperative environment! This repo allows you to run all Commit-Boost components related to ETHGas in Docker. There are 3 main components, i.e.
-* `cb_pbs`: It serves a similar purpose as MEV-Boost. To avoid validators being slashed because of signing a block without preconf, please only set relays that are approved by ETHGas.
+* `cb_pbs`: It serves a similar purpose as MEV-Boost.
 * `cb_signer`: It securely generates signatures from the validator BLS private keys. If you use remote signer or want to onboard DVT validators, you don't need this component.
 * `cb_ethgas_commit`: It requests signatures for ETHGas registration from `cb_signer` where the signatures are then sent to the ETHGas Exchange via REST API
 ![Architecture](./architecture.png)
@@ -8,13 +8,13 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
-* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
+* For `cb_pbs`, , you can either use our pre-built linux/amd64 or linux/arm64 docker image or use Dockerfile [here](https://github.com/ethgas-developer/ethgas-commit-boost-client/tree/ethgas-pbs/provisioning) to build it locally
+* For `cb_signer`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
 
 ## Config Setup
 * Copy one of the `config.example.<env>.toml` as `config.toml`
 * Copy `docker-compose-example.yml` as `docker-compose.yml`
 * Create an empty `.cb.env` file and run `docker compose -f docker-compose.yml up cb_gen_jwt` to generate new jwt for the signer module
-* Do not use any other relay than the one listed in the `config.example.<env>.toml`, otherwise you will get slashed
 * Registration of SSV or Obol validators can skip signer-related setup below
 * For local signer module, Commit Boost supports various consensus client. Please refer to [here](https://commit-boost.github.io/commit-boost-client/get_started/configuration#local-signer) for more details
     * `format`, `keys_path` and `secrets_path` are used together and cannot be used together with `key_path` (key without s)
@@ -48,6 +48,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
     * set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
     * set `enable_ofac = true` if your validators only accept ofac-compliant blocks. This is a pubkey-specific setting so you could specify list of pubkeys in `[[mux]].validator_pubkeys` or `ssv_node_operator_owner_validator_pubkeys`.
     * `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
+    * `payout_address` is your actual fee recipient address for receiving payout if ETHGas collateral contract (EthgasPool) address is set as the fee recipient in your beacon node
+    * In order to use relays other than those listed in the `config.example.<env>.toml`, you MUST set fee recipient address of your beacon node and validator client as ETHGas collateral contract (EthgasPool) address, otherwise you will get slashed. EthgasPool address can be found below
     * `overall_wait_interval_in_second` indicates the waiting time before re-running the module, set it as `0` to stop re-running the module
     * set `query_pubkey = true` if you want to query all your validator pubkeys regardless of standard or dvt type that have been registered on the ETHGas Exchange. A txt file will be created in `./records` folder
     * The config is reloaded before every re-run of the module so you could update the `[[modules]]` config directly that will be effective in the next run of the module
