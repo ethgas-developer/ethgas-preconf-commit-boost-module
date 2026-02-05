@@ -1,6 +1,6 @@
 services:
   cb_pbs:
-    image: ghcr.io/ethgas-developer/commitboost_ethgas_pbs:v0.9.2-ethgas
+    image: ghcr.io/commit-boost/pbs:v0.9.2
     container_name: cb_pbs
     ports:
     - 18550:18550

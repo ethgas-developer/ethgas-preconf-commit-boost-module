@@ -8,8 +8,7 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 
 ## Build docker images
 * For `cb_ethgas_commit` and `cb_gen_jwt`, you can either use our pre-built linux/amd64 or linux/arm64 docker image or run `./scripts/build.sh` to build it locally
-* For `cb_pbs`, , you can either use our pre-built linux/amd64 or linux/arm64 docker image or use Dockerfile [here](https://github.com/ethgas-developer/ethgas-commit-boost-client/tree/ethgas-pbs/provisioning) to build it locally
-* For `cb_signer`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
+* For `cb_signer` and `cb_pbs`, you can either use the official image from Commit Boost team or use Dockerfile [here](https://github.com/Commit-Boost/commit-boost-client/tree/main/provisioning) to build it locally
 
 ## Config Setup
 * Copy one of the `config.example.<env>.toml` as `config.toml`
