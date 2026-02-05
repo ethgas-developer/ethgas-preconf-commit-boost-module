@@ -7,66 +7,87 @@
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
 chain = "Mainnet" # this affect BUILDER_DOMAIN used in signing data root hash
 
-# Configuration for the PBS module
+# Configuration for the PBS module.
 [pbs]
 # Docker image to use for the PBS module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/pbs:latest
+# TODO: Can this be removed as it is set in the docker-compose file?
 docker_image = "ghcr.io/commit-boost/pbs:latest"
+
 # Whether to enable the PBS module to request signatures from the Signer module (not used in the default PBS image)
 # OPTIONAL, DEFAULT: false
 with_signer = false
-# Host to receive BuilderAPI calls from beacon node
+
+# Host to receive BuilderAPI calls from beacon node.
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
-# Port to receive BuilderAPI calls from beacon node
+
+# Port to receive BuilderAPI calls from beacon node.
 # OPTIONAL, DEFAULT: 18550
 port = 18550
-# Whether to forward `status` calls to relays or skip and return 200
+
+# Whether to forward `status` calls to relays or skip and return 200.
 # OPTIONAL, DEFAULT: true
 relay_check = true
-# Whether to return after the first successful registration, or wait for all relays to respond
+
+# Whether to return after the first successful registration, or wait for all relays to respond.
 # OPTIONAL, DEFAULT: true
 wait_all_registrations = true
+
 # Timeout in milliseconds for the `get_header` call to relays. Note that the CL has also a timeout (e.g. 1 second) so
-# this should be lower than that, leaving some margin for overhead
+# this should be lower than that, leaving some margin for overhead.
 # OPTIONAL, DEFAULT: 950
 timeout_get_header_ms = 950
+
 # Timeout in milliseconds for the `submit_blinded_block` call to relays.
 # OPTIONAL, DEFAULT: 4000
 timeout_get_payload_ms = 4000
+
 # Timeout in milliseconds for the `register_validator` call to relays.
 # OPTIONAL, DEFAULT: 3000
 timeout_register_validator_ms = 3000
-# Whether to skip signature verification of headers and pubkey matching against the relay pubkey
+
+# Whether to skip signature verification of headers and pubkey matching against the relay pubkey.
 # OPTIONAL, DEFAULT: false
 skip_sigverify = false
-# Minimum bid in ETH that will be accepted from `get_header`
-# Can be specified as a float or a string for extra precision (e.g. "0.01")
+
+# Minimum bid in ETH that will be accepted from `get_header`.
+# Can be specified as a float or a string for extra precision (e.g. "0.01").
 # OPTIONAL, DEFAULT: 0.0
 min_bid_eth = 0.0
-# How late in milliseconds in the slot is "late". This impacts the `get_header` requests, by shortening timeouts for `get_header` calls to
-# relays and make sure a header is returned within this deadline. If the request from the CL comes later in the slot, then fetching headers is skipped
-# to force local building and miniminzing the risk of missed slots. See also the timing games section below
+
+# How late in milliseconds in the slot is "late". 
+# This impacts the `get_header` requests, by shortening timeouts for `get_header` calls to
+# relays and make sure a header is returned within this deadline. 
+# If the request from the CL comes later in the slot, then fetching headers is skipped
+# to force local building and minimizing the risk of missed slots. See also the timing games section below.
 # OPTIONAL, DEFAULT: 2000
 late_in_slot_time_ms = 2000
-# Whether to enable extra validation of get_header responses, if this is enabled `rpc_url` must also be set
+
+# Whether to enable extra validation of get_header responses, if this is enabled `rpc_url` must also be set.
 # OPTIONAL, DEFAULT: false
 extra_validation_enabled = false
-# Execution Layer RPC url to use for extra validation
+
+# Execution Layer RPC url to use for extra validation.
 # OPTIONAL
 rpc_url = "https://ethereum-rpc.publicnode.com"
-# URL of the SSV API server to use, if you have a mux that targets an SSV node operator
+
+# URL of the SSV API server to use, if you have a mux that targets an SSV node operator.
 # OPTIONAL, DEFAULT: "https://api.ssv.network/api/v4"
 # ssv_api_url = "https://api.ssv.network/api/v4"
-# Timeout for any HTTP requests sent from the PBS module to other services, in seconds
+
+# Timeout for any HTTP requests sent from the PBS module to other services, in seconds.
 # OPTIONAL, DEFAULT: 10
 http_timeout_seconds = 10
-# Maximum number of retries for validator registrations per relay
+
+# Maximum number of retries for validator registrations per relay.
 # OPTIONAL, DEFAULT: 3
 register_validator_retry_limit = 3
+
 # Maximum number of validators to register in a single request.
 # OPTIONAL, DEFAULT: "" (unlimited)
 validator_registration_batch_size = ""
+
 # For any Registry-based Mux configurations that have dynamic pubkey
 # refreshing enabled, this is how often to refresh the list of pubkeys
 # from the registry, in seconds. Enabling registry refreshing is done per-mux
@@ -77,24 +98,32 @@ mux_registry_refresh_interval_seconds = 384
 
 # The PBS module needs one or more [[relays]] as defined below.
 [[relays]]
-# Relay ID to use in telemetry
+# Relay ID to use in telemetry.
 # OPTIONAL, DEFAULT: URL hostname
 id = "ethgas-us"
-# Relay URL in the format scheme://pubkey@host
+
+# Relay URL in the format scheme://pubkey@host.
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
-# Headers to send with each request for this relay
+
+# Headers to send with each request for this relay.
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
-# GET parameters to add to each request URL for this relay
+
+# GET parameters to add to each request URL for this relay.
 # OPTIONAL
 # get_params = { param1 = "value1", param2 = "value2" }
+
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
-# These values should be carefully chosen for each relay, as each relay has different latency and timing games setups.
-# They should only be used by advanced users, and if mis-configured can result in unforeseen effects, e.g. fetching a lower header value,
-# or getting a temporary IP ban.
-#
+# These values should be carefully chosen for each relay, 
+# as each relay has different latency and timing games setups.
+# They should only be used by advanced users, and if mis-configured 
+# can result in unforeseen effects, e.g. fetching a lower header value, or getting a temporary IP ban.
 # EXAMPLES
-# Assuming: timeout_get_header_ms = 950, frequency_get_header_ms = 300, target_first_request_ms = 200, late_in_slot_time_ms = 2000
+# Assuming: 
+#   timeout_get_header_ms = 950
+#   frequency_get_header_ms = 300
+#   target_first_request_ms = 200
+#   late_in_slot_time_ms = 2000
 #
 # 1) CL request comes at 100ms in the slot (max timeout 1050ms in the slot), then:
 #   - sleep for 100ms
@@ -107,14 +136,19 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 # 3) CL request comes 2500ms in the slot then:
 #   - return 204 and force local build
 #
-# OPTIONAL, DEFAULT: false, please consult us if you wanna delay the validator signing from the consensus client
+# OPTIONAL, DEFAULT: false, please consult us if you want to delay the validator signing from the consensus client.
 enable_timing_games = true
-# Target time in slot when to send the first header request
+
+# Target time in slot when to send the first header request.
 # OPTIONAL
+# TODO: If this is optional, what is the default value if it is not set?
 target_first_request_ms = 0
-# Frequency in ms to send get_header requests
+
+# Frequency in ms to send get_header requests.
 # OPTIONAL
+# TODO: If this is optional, what is the default value if it is not set?
 frequency_get_header_ms = 100
+
 # Maximum number of validators to register in a single request.
 # OPTIONAL, DEFAULT: "" (unlimited)
 validator_registration_batch_size = ""
@@ -133,40 +167,54 @@ enable_timing_games = true
 target_first_request_ms = 0
 frequency_get_header_ms = 100
 
-# Configuration for the PBS multiplexers, which enable different configs to be used for get header requests, depending on validator pubkey
+# Configuration for the PBS multiplexers, which enable different 
+# configs to be used for get header requests, depending on validator pubkey.
 # Note that:
 # - multiple sets of keys can be defined by adding multiple [[mux]] sections. The validator pubkey sets need to be disjoint
 # - the mux is only used for get header requests
 # - if any value is missing from the mux config, the default value from the main config will be used
 # [[mux]]
 # Unique ID for the mux config
+# TODO: OPTIONAL OR REQUIRED? Default value?
 # id = "ethgas_mux"
+
 # Which validator pubkeys to match against this mux config. This can be empty or omitted if a loader is specified.
 # Any keys loaded via the loader will be added to this list.
 # validator_pubkeys = [
 #     "0x80c7f782b2467c5898c5516a8b6595d75623960b4afc4f71ee07d40985d20e117ba35e7cd352a3e75fb85a8668a3b745",
 #     "0xa119589bb33ef52acbb8116832bec2b58fca590fe5c85eac5d3230b44d5bc09fe73ccd21f88eab31d6de16194d17782e",
 # ]
+
 # Path to a file containing a list of validator pubkeys or details of a registry to load keys from.
 # Supported registries:
 #   - Lido: NodeOperatorsRegistry
 #   - SSV: SSV API
 # OPTIONAL
 # loader = "/tests/data/mux_keys.example.json"
-# URL to HTTP endpoint returning JSON list of validator pubkeys
+
+# URL to HTTP endpoint returning JSON list of validator pubkeys.
 # Example response:
 # [
 #   "0x80c7f782b2467c5898c5516a8b6595d75623960b4afc4f71ee07d40985d20e117ba35e7cd352a3e75fb85a8668a3b745",
 #   "0xa119589bb33ef52acbb8116832bec2b58fca590fe5c85eac5d3230b44d5bc09fe73ccd21f88eab31d6de16194d17782e"
 #]
 # loader = { url = "http://localhost:8000/keys" }
+
+# Example of loading keys from the Lido registry
 # loader = { registry = "lido", node_operator_id = 8 }
+
+# Example of loading keys from an SSV API
 # loader = { registry = "ssv", node_operator_id = 8 }
+
+# TODO: OPTIONAL OR REQUIRED? Default value?
 # timeout_get_header_ms = 950
+
+# TODO: OPTIONAL OR REQUIRED? Default value?
 # late_in_slot_time_ms = 2000
-# For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys
-# Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored
-# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms)
+
+# For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys.
+# Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored.
+# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms).
 # [[mux.relays]]
 # id = "ethgas-us"
 # url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
@@ -188,53 +236,63 @@ frequency_get_header_ms = 100
 # target_first_request_ms = 0
 # frequency_get_header_ms = 100
 
-# Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`
+# Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`.
 # Currently three types of Signer modules are supported (only one can be used at a time):
 #   - Remote: a remote Web3Signer instance
 #   - Dirk: a remote Dirk instance
 #   - Local: a local Signer module
-# More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module)
+# More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module).
 [signer]
 # Docker image to use for the Signer module.
 # OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
 docker_image = "ghcr.io/commit-boost/signer:latest"
-# Host to bind the Signer API server to
+
+# Host to bind the Signer API server to.
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
-# Port to listen for Signer API calls on
+
+# Port to listen for Signer API calls on.
 # OPTIONAL, DEFAULT: 20000
 port = 20000
-# Number of JWT authentication attempts a client can fail before blocking that client temporarily from Signer access
+
+# Number of JWT authentication attempts a client can fail before blocking that client temporarily from Signer access.
 # OPTIONAL, DEFAULT: 3
 jwt_auth_fail_limit = 3
-# How long to block a client from Signer access, in seconds, if it failed JWT authentication too many times
+
+# How long to block a client from Signer access, in seconds, if it failed JWT authentication too many times.
 # OPTIONAL, DEFAULT: 300
 jwt_auth_fail_timeout_seconds = 300
 
 # For Remote signer:
 # [signer.remote]
-# URL of the Web3Signer instance
+# URL of the Web3Signer instance.
 # url = "https://remote.signer.url"
+
 # For Dirk signer:
 # [signer.dirk]
-# Path to the client certificate to authenticate with Dirk
+# Path to the client certificate to authenticate with Dirk.
 # cert_path = "/path/to/client.crt"
-# Path to the client key
+
+# Path to the client key.
 # key_path = "/path/to/client.key"
-# Path to the secrets directory where the accounts passwords are stored
+
+# Path to the secrets directory where the accounts passwords are stored.
 # secrets_path = "/path/to/secrets"
-# Path to the CA certificate that signed the Dirk server certificate
+
+# Path to the CA certificate that signed the Dirk server certificate.
 # OPTIONAL
 # ca_cert_path = "/path/to/ca.crt"
 
-# Add one entry like this for each Dirk host
+# Add one entry like this for each Dirk host.
 # [[signer.dirk.hosts]]
-# Domain name of the server to use in TLS verification, if different from the URL
+# Domain name of the server to use in TLS verification, if different from the URL.
 # OPTIONAL
 # server_name = "localhost-1"
-# Complete URL of a Dirk gateway
+
+# Complete URL of a Dirk gateway.
 # url = "https://localhost:8881"
-# Wallets to load consensus keys from
+
+# Wallets to load consensus keys from.
 # accounts = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
@@ -252,24 +310,29 @@ jwt_auth_fail_timeout_seconds = 300
 #   - File: load keys from a plain text file (unsafe, use only for testing purposes)
 #   - ValidatorsDir: load keys from a `keys` and `secrets` file/folder (ERC-2335 style keystores). More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/)
 [signer.local.loader]
-# File: path to the keys file
+# TODO: is key_path used for non-Dirk signer?
+# File: path to the keys file.
 # key_path = "./tests/data/keys.example.json"
-# ValidatorsDir: format of the keystore (lighthouse, prysm, teku or lodestar)
+
+# Format of the keystore (lighthouse, prysm, teku or lodestar)
 format = "lighthouse"
-# ValidatorsDir: full path to the keys directory
+
+# Full path to the keys directory
 # For lighthouse, it's the path to the directory where the `<pubkey>` directories are located, under each of which is a `voting-keystore.json` file.
 # For prysm, it's the path to the `all-accounts.keystore.json` file.
 # For teku, it's the path to the directory where all `<pubkey>.json` files are located.
 # For lodestar, it's the path to the directory where all `<pubkey>.json` files are located.
 # For nimbus, it's the path to the directory where the `<pubkey>` directories are located, under each of which is a `keystore.json` file.
 keys_path = "/path/to/data_validator/validators"
-# ValidatorsDir: full path to the secrets file/directory
+
+# Full path to the secrets file/directory
 # For lighthouse, it's the path to the directory where the `<pubkey>` files are located.
 # For prysm, it's the path to the file containing the wallet decryption password.
 # For teku, it's the path to the directory where all `<pubkey>.txt` files are located.
 # For lodestar, it's the path to the file containing the decryption password.
 # For nimbus, it's the path to the directory where the `<pubkey>` files are located.
 secrets_path = "/path/to/data_validator/secrets"
+
 # Configuration for how the Signer module should store proxy delegations. Supported types of store are:
 #   - File: store keys and delegations from a plain text file (unsafe, use only for testing purposes)
 #   - ERC2335: store keys and delegations safely using ERC-2335 style keystores. More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration#proxy-keys-store)
@@ -291,25 +354,77 @@ id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
 docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
+
+# TODO: OPTIONAL OR REQUIRED? Default value?
 exchange_api_base = "https://mainnet.app.ethgas.com"
+
+# TODO: OPTIONAL OR REQUIRED? Default value?
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
+
+# Indicates the waiting time before re-running the module, set it as 0 to stop re-running the module.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 overall_wait_interval_in_second = 0
-registration_mode = "standard" # standard, standard-mux, ssv, obol, skipped
+
+# Mode of registration.
+# Supported values: standard, standard-mux, ssv, obol, skipped
+# When registration_mode = standard, all validator public keys inside the
+# keys directory or file will be registered in the ETHGas Exchange. 
+# To enable PBS multiplexer, set registration_mode = standard-mux 
+# and set the id of [[mux.relays]] to contain ethgas wording under [[mux]] section, 
+# then only validator public keys of validator_pubkeys or loader will be registered.
+# TODO: OPTIONAL OR REQUIRED? Default value?
+registration_mode = "standard"
+
+# Set to true to register validators in ETHGas, set to false to de-register validators.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 enable_registration = true
+
+# Enable to delegate to the the ETHGas default pricer to help you to sell preconfs.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 enable_pricer = true
+
+# Set to true to delegate to a specific external builder to build the block. 
+# Regardless of whether the builder delegation is enabled or not, 
+# our fallback builder will always build a backup block which can fulfill all the preconf commitments.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 enable_builder = false
+
+# Set to true if your validators only accept ofac-compliant blocks. 
+# This is a pubkey-specific setting so you could specify a list 
+# of pubkeys in [[mux]].validator_pubkeys or ssv_node_operator_owner_validator_pubkeys.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 enable_ofac = false
-collateral_per_slot = "0"
-# payout_address = "0x..." # your actual fee recipient address for receiving payout if ETHGas collateral contract (EthgasPool) address is set as the fee recipient in your beacon node
+
+# Indicates how much ETH is allocated to secure a single slot.
+# It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal places.
+# # TODO: OPTIONAL OR REQUIRED? Default value?
+# collateral_per_slot = "0"
+
+# Address of the fee recipient for receiving payout if ETHGas collateral 
+# contract (EthgasPool) address is set as the validator fee recipient.
+# OPTIONAL
+# payout_address = "0x..."
+
+# TODO: Add explanation for builder_pubkey.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 builder_pubkey = "0x94a076b27f294dc44b9fd44d8e2b063fb129bc85ed047da1cefb82d16e1a13e6b50de31a86f5b233d1e6bbaca3c69173" # Titan, you could change it to any other registered builder pubkey
+
+# TODO: OPTIONAL OR REQUIRED? Default value?
 is_jwt_provided = false
+
+# Set to true if you want to query all your validator pubkeys regardless 
+# of standard or dvt type that have been registered on the ETHGas Exchange. 
+# A txt file will be created in ./records folder.
+# TODO: OPTIONAL OR REQUIRED? Default value?
 query_pubkey = true
-# Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value
-# Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables
+
+# Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
+# Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables.
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
-# below configs are only for ssv validators
+
+# Below configs are only for ssv validators.
 # ssv_node_operator_owner_mode = "key" # key, keystore, ledger, tx
 # ssv_node_operator_owner_signing_keys = [
 #     "0x...",
@@ -378,16 +493,17 @@ collateral_to_be_deposited = "0.01"
 collateral_contract = "0x3314Fb492a5d205A601f2A0521fAFbD039502Fc3"
 eoa_signing_key = "0x..."
 
-
 # Configuration for how metrics should be collected and scraped
 # OPTIONAL, skip metrics collection if missing
 [metrics]
 # Whether to collect metrics
 # OPTIONAL, DEFAULT: true
 enabled = true
+
 # Host to listen on for metrics
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "127.0.0.1"
+
 # Services will listen for Prometheus scrapes on this port, port + 1, +2, etc.
 # OPTIONAL, DEFAULT: 10000
 start_port = 10000
@@ -398,12 +514,15 @@ start_port = 10000
 # Whether to enable stdout logging
 # OPTIONAL, DEFAULT: true
 enabled = true
+
 # Log level. Supported values: trace, debug, info, warn, error
 # OPTIONAL, DEFAULT: info
 level = "info"
+
 # Log in JSON format
 # OPTIONAL, DEFAULT: false
 use_json = false
+
 # Whether to enable ANSI color codes
 # OPTIONAL, DEFAULT: true
 color = true
@@ -414,15 +533,19 @@ color = true
 # Whether to enable file logging
 # OPTIONAL, DEFAULT: false
 enabled = true
+
 # Log level. Supported values: trace, debug, info, warn, error
 # OPTIONAL, DEFAULT: info
 level = "debug"
+
 # Log in JSON format
 # OPTIONAL, DEFAULT: true
 use_json = true
+
 # Path to the log directory
 # OPTIONAL, DEFAULT: /var/logs/commit-boost
 dir_path = "./logs"
+
 # Maximum number of log files to keep
 # OPTIONAL
 max_files = 30
