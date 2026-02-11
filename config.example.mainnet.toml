@@ -9,11 +9,6 @@ chain = "Mainnet" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module.
 [pbs]
-# Docker image to use for the PBS module.
-# OPTIONAL, DEFAULT: ghcr.io/commit-boost/pbs:latest
-# TODO: Can this be removed as it is set in the docker-compose file?
-docker_image = "ghcr.io/commit-boost/pbs:latest"
-
 # Whether to enable the PBS module to request signatures from the Signer module (not used in the default PBS image)
 # OPTIONAL, DEFAULT: false
 with_signer = false
@@ -68,9 +63,9 @@ late_in_slot_time_ms = 2000
 # OPTIONAL, DEFAULT: false
 extra_validation_enabled = false
 
-# Execution Layer RPC url to use for extra validation.
+# Execution Layer RPC url to for the deposit module.
 # OPTIONAL
-rpc_url = "https://ethereum-rpc.publicnode.com"
+# rpc_url = "https://ethereum-rpc.publicnode.com"
 
 # URL of the SSV API server to use, if you have a mux that targets an SSV node operator.
 # OPTIONAL, DEFAULT: "https://api.ssv.network/api/v4"
@@ -141,12 +136,10 @@ enable_timing_games = true
 
 # Target time in slot when to send the first header request.
 # OPTIONAL
-# TODO: If this is optional, what is the default value if it is not set?
 target_first_request_ms = 0
 
 # Frequency in ms to send get_header requests.
 # OPTIONAL
-# TODO: If this is optional, what is the default value if it is not set?
 frequency_get_header_ms = 100
 
 # Maximum number of validators to register in a single request.
@@ -175,7 +168,7 @@ frequency_get_header_ms = 100
 # - if any value is missing from the mux config, the default value from the main config will be used
 # [[mux]]
 # Unique ID for the mux config
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 # id = "ethgas_mux"
 
 # Which validator pubkeys to match against this mux config. This can be empty or omitted if a loader is specified.
@@ -206,10 +199,10 @@ frequency_get_header_ms = 100
 # Example of loading keys from an SSV API
 # loader = { registry = "ssv", node_operator_id = 8 }
 
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# OPTIONAL
 # timeout_get_header_ms = 950
 
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# OPTIONAL
 # late_in_slot_time_ms = 2000
 
 # For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys.
@@ -243,10 +236,6 @@ frequency_get_header_ms = 100
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module).
 [signer]
-# Docker image to use for the Signer module.
-# OPTIONAL, DEFAULT: ghcr.io/commit-boost/signer:latest
-docker_image = "ghcr.io/commit-boost/signer:latest"
-
 # Host to bind the Signer API server to.
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
@@ -310,10 +299,6 @@ jwt_auth_fail_timeout_seconds = 300
 #   - File: load keys from a plain text file (unsafe, use only for testing purposes)
 #   - ValidatorsDir: load keys from a `keys` and `secrets` file/folder (ERC-2335 style keystores). More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/)
 [signer.local.loader]
-# TODO: is key_path used for non-Dirk signer?
-# File: path to the keys file.
-# key_path = "./tests/data/keys.example.json"
-
 # Format of the keystore (lighthouse, prysm, teku or lodestar)
 format = "lighthouse"
 
@@ -353,16 +338,15 @@ secrets_path = "/path/to/data_validator/secrets"
 id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 exchange_api_base = "https://mainnet.app.ethgas.com"
 
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 
 # Indicates the waiting time before re-running the module, set it as 0 to stop re-running the module.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 overall_wait_interval_in_second = 0
 
 # Mode of registration.
@@ -372,55 +356,59 @@ overall_wait_interval_in_second = 0
 # To enable PBS multiplexer, set registration_mode = standard-mux 
 # and set the id of [[mux.relays]] to contain ethgas wording under [[mux]] section, 
 # then only validator public keys of validator_pubkeys or loader will be registered.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 registration_mode = "standard"
 
 # Set to true to register validators in ETHGas, set to false to de-register validators.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 enable_registration = true
 
 # Enable to delegate to the the ETHGas default pricer to help you to sell preconfs.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 enable_pricer = true
 
 # Set to true to delegate to a specific external builder to build the block. 
 # Regardless of whether the builder delegation is enabled or not, 
 # our fallback builder will always build a backup block which can fulfill all the preconf commitments.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 enable_builder = false
 
 # Set to true if your validators only accept ofac-compliant blocks. 
 # This is a pubkey-specific setting so you could specify a list 
 # of pubkeys in [[mux]].validator_pubkeys or ssv_node_operator_owner_validator_pubkeys.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 enable_ofac = false
 
 # Indicates how much ETH is allocated to secure a single slot.
 # It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal places.
-# # TODO: OPTIONAL OR REQUIRED? Default value?
-# collateral_per_slot = "0"
+# REQUIRED
+collateral_per_slot = "0"
 
 # Address of the fee recipient for receiving payout if ETHGas collateral 
 # contract (EthgasPool) address is set as the validator fee recipient.
 # OPTIONAL
 # payout_address = "0x..."
 
-# TODO: Add explanation for builder_pubkey.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# A builder pubkey is required as a default, even when it is not used by the validator.
+# REQUIRED
 builder_pubkey = "0x94a076b27f294dc44b9fd44d8e2b063fb129bc85ed047da1cefb82d16e1a13e6b50de31a86f5b233d1e6bbaca3c69173" # Titan, you could change it to any other registered builder pubkey
 
-# TODO: OPTIONAL OR REQUIRED? Default value?
+
+# REQUIRED
 is_jwt_provided = false
 
 # Set to true if you want to query all your validator pubkeys regardless 
 # of standard or dvt type that have been registered on the ETHGas Exchange. 
 # A txt file will be created in ./records folder.
-# TODO: OPTIONAL OR REQUIRED? Default value?
+# REQUIRED
 query_pubkey = true
 
 # Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables.
+# OPTIONAL
 eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
+
+# OPTIONAL
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 
@@ -486,11 +474,20 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 id = "ETHGAS_DEPOSIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
+
+# REQUIRED
 block_confirmation = 12
+
+# REQUIRED
 exchange_api_base = "https://mainnet.app.ethgas.com"
+
+# REQUIRED
 collateral_to_be_deposited = "0.01"
+
+# REQUIRED
 collateral_contract = "0x3314Fb492a5d205A601f2A0521fAFbD039502Fc3"
+
+# OPTIONAL
 eoa_signing_key = "0x..."
 
 # Configuration for how metrics should be collected and scraped
