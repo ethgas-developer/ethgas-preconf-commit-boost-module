@@ -63,7 +63,7 @@ late_in_slot_time_ms = 2000
 # OPTIONAL, DEFAULT: false
 extra_validation_enabled = false
 
-# Execution Layer RPC url to for the deposit module.
+# Execution Layer RPC url to use for extra validation and the deposit module.
 # OPTIONAL
 # rpc_url = "rpc_url = "https://ethereum-hoodi-rpc.publicnode.com"
 
@@ -307,6 +307,7 @@ secrets_path = "/path/to/data_validator/secrets"
 id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
+docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
 
 # REQUIRED
 exchange_api_base = "https://hoodi.app.ethgas.com"
@@ -443,6 +444,7 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 id = "ETHGAS_DEPOSIT"
 type = "commit"
 env_file = ".cb.env"
+docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
 
 # REQUIRED
 block_confirmation = 12

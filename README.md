@@ -23,8 +23,8 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 ## Get started
 
 - [Node operators - Quick Start Guide](https://docs.ethgas.com/get-started/node-operators/quick-start-guide)
-- [Node operators - Detailed Example Config - Mainnet](https://github.com/ethgas-developer/ethgas-preconf-commit-boost-module/blob/main/config.example.mainnet.toml)
-- [Node operators - Detailed Example Config - Hoodi](https://github.com/ethgas-developer/ethgas-preconf-commit-boost-module/blob/main/config.example.hoodi.toml)
+- [Node operators - Detailed Example Config - Mainnet](./config.example.mainnet.toml)
+- [Node operators - Detailed Example Config - Hoodi](./config.example.hoodi.toml)
 - [Additional Configuration Notes](./extra-config-notes.md)
 
 ## Audit
