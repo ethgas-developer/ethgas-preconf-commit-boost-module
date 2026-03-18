@@ -405,10 +405,11 @@ is_jwt_provided = false
 # REQUIRED
 query_pubkey = true
 
-# Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
+# Specify either eoa_signing_key/eoa_ledger_path or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables.
 # OPTIONAL
-eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
+eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false and eoa_ledger_path is not set
+# eoa_ledger_path = "m/44'/60'/0'/0" # for registration in exchange with Ledger, required if is_jwt_provided = false and eoa_signing_key is not set
 
 # OPTIONAL
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true

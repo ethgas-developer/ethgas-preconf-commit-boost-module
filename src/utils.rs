@@ -3,6 +3,14 @@ use reqwest::{Client, Url};
 use serde::Deserialize;
 use std::error::Error;
 use tracing::{error, info};
+use alloy::{
+    hex::encode,
+    sol_types::eip712_domain
+};
+use crate::{
+    login_types::{EoaSigner, Eip712Message}, 
+    dvt_types::Eip712MessageDvt
+};
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,4 +52,57 @@ pub async fn update_payout_address(
     }
 
     Ok(())
+}
+
+pub async fn generate_eip712_signature(
+    eip712_message_str: &str, 
+    signer: &EoaSigner
+) -> Result<String> {
+
+    let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
+        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+
+    let domain = eip712_domain! {
+        name: eip712_message.domain.name,
+        version: eip712_message.domain.version,
+        chain_id: eip712_message.domain.chain_id,
+        verifying_contract: eip712_message.domain.verifying_contract,
+    };
+
+    let message = crate::login_types::data {
+        hash: eip712_message.message.hash.clone(),
+        message: eip712_message.message.message,
+        domain: eip712_message.message.domain,
+    };
+
+    // let hash = message.eip712_signing_hash(&domain);
+    // let signature = signer.sign_hash(&hash).await?;
+    let signature = signer.sign_typed_data(&message, &domain).await?;
+    Ok(encode(signature.as_bytes()))
+}
+
+pub async fn generate_eip712_signature_for_dvt(
+    eip712_message_str: &str,
+    signer: &EoaSigner,
+) -> Result<String> {
+    let eip712_message: Eip712MessageDvt = serde_json::from_str(eip712_message_str)
+        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+
+    let domain = eip712_domain! {
+        name: eip712_message.domain.name,
+        version: eip712_message.domain.version,
+        chain_id: eip712_message.domain.chain_id,
+        verifying_contract: eip712_message.domain.verifying_contract,
+    };
+
+    let message = crate::dvt_types::data {
+        userId: eip712_message.message.user_id,
+        userAddress: eip712_message.message.user_address,
+        verifyType: eip712_message.message.verify_type,
+    };
+
+    // let hash = message.eip712_signing_hash(&domain);
+    // let signature = signer.sign_hash(&hash).await?;
+    let signature = signer.sign_typed_data(&message, &domain).await?;
+    Ok(encode(signature.as_bytes()))
 }

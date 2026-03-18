@@ -1,31 +1,28 @@
 use alloy::{
-    hex::encode,
-    primitives::{FixedBytes, Signature, B256},
+    primitives::{FixedBytes, B256},
     signers::{
         ledger::{HDPath, LedgerSigner},
         local::PrivateKeySigner,
-        Error as SignerError, Signer,
     },
-    sol,
-    sol_types::{eip712_domain, Eip712Domain, SolStruct},
 };
 use commit_boost::prelude::*;
 use cookie::Cookie;
 use ethgas_commit::{
-    models::KeystoreConfig,
+    login_types::{EoaSigner, Eip712Message},
+    dvt_types::KeystoreConfig,
     obol_registry::register_obol_keys,
     ofac::update_ofac,
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::update_payout_address
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, update_payout_address}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
 use reqwest::{Client, Response, Url};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{collections::{HashMap, HashSet}, env, error::Error, str::FromStr, time::Duration};
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
@@ -47,7 +44,13 @@ lazy_static! {
 struct EthgasExchangeService {
     exchange_api_base: String,
     entity_name: String,
-    eoa_signing_key: B256,
+    eoa_signer_config: EoaSignerConfig,
+}
+
+#[derive(Clone)]
+enum EoaSignerConfig {
+    PrivateKey(B256),
+    LedgerPath(String),
 }
 
 struct EthgasCommitService {
@@ -77,13 +80,14 @@ struct ExtraConfig {
     is_jwt_provided: bool,
     query_pubkey: bool,
     eoa_signing_key: Option<B256>,
+    eoa_ledger_path: Option<String>,
     access_jwt: Option<String>,
     refresh_jwt: Option<String>,
     ssv_node_operator_owner_mode: Option<String>,
     ssv_node_operator_owner_signing_keys: Option<Vec<B256>>,
     ssv_node_operator_owner_keystores: Option<Vec<KeystoreConfig>>,
     ssv_node_operator_owner_ledger_paths: Option<Vec<String>>,
-    ssv_node_operator_owner_tx_hashes:  Option<Vec<String>>,
+    ssv_node_operator_owner_tx_hashes: Option<Vec<String>>,
     ssv_node_operator_owner_tx_from_addr: Option<Vec<alloy::primitives::Address>>,
     ssv_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
     obol_node_operator_owner_mode: Option<String>,
@@ -103,42 +107,6 @@ struct RegisteredInfo {
 struct SigningData {
     object_root: [u8; 32],
     signing_domain: [u8; 32],
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Domain {
-    name: String,
-    version: String,
-    chain_id: u64,
-    verifying_contract: alloy::primitives::Address,
-}
-
-#[derive(Debug, Deserialize)]
-struct Message {
-    hash: String,
-    message: String,
-    domain: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Eip712Message {
-    message: Message,
-    domain: Domain,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct MessageSsv {
-    user_id: String,
-    user_address: String,
-    verify_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Eip712MessageSsv {
-    message: MessageSsv,
-    domain: Domain,
 }
 
 #[derive(Debug, Deserialize)]
@@ -273,7 +241,7 @@ struct APISsvValidatorDeregisterResponse {
 
 #[derive(Debug, Deserialize)]
 struct APISsvValidatorDeregisterResponseData {
-    removed: Vec<BlsPublicKey>,
+    removed: Option<Vec<BlsPublicKey>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -291,114 +259,27 @@ struct APICollateralPerSlotResponse {
     success: bool,
 }
 
-async fn generate_eip712_signature(
-    eip712_message_str: &str,
-    signer: &PrivateKeySigner,
-) -> Result<String> {
-    sol! {
-        #[allow(missing_docs)]
-        #[derive(Serialize)]
-        struct data {
-            string hash;
-            string message;
-            string domain;
-        }
-    }
-
-    let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
-        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-
-    let domain = eip712_domain! {
-        name: eip712_message.domain.name,
-        version: eip712_message.domain.version,
-        chain_id: eip712_message.domain.chain_id,
-        verifying_contract: eip712_message.domain.verifying_contract,
-    };
-
-    let message = data {
-        hash: eip712_message.message.hash.clone(),
-        message: eip712_message.message.message,
-        domain: eip712_message.message.domain,
-    };
-
-    let hash = message.eip712_signing_hash(&domain);
-    let signature = signer.sign_hash(&hash).await?;
-    Ok(encode(signature.as_bytes()))
-}
-
-sol! {
-    #[allow(missing_docs)]
-    #[derive(Serialize)]
-    struct data {
-        string userId;
-        string userAddress;
-        string verifyType;
-    }
-}
-enum SSVSigner {
-    PrivateKey(PrivateKeySigner),
-    Ledger(LedgerSigner),
-}
-
-impl SSVSigner {
-    pub fn address(&self) -> alloy::primitives::Address {
-        match self {
-            SSVSigner::Ledger(signer) => signer.address(),
-            SSVSigner::PrivateKey(signer) => signer.address(),
-        }
-    }
-
-    pub async fn sign_typed_data(
-        &self,
-        message: &data,
-        domain: &Eip712Domain,
-    ) -> Result<Signature, SignerError> {
-        match self {
-            SSVSigner::Ledger(signer) => signer.sign_typed_data(message, domain).await,
-            SSVSigner::PrivateKey(signer) => signer.sign_typed_data(message, domain).await,
-        }
-    }
-}
-
-async fn generate_eip712_signature_for_ssv(
-    eip712_message_str: &str,
-    signer: &SSVSigner,
-) -> Result<String> {
-    let eip712_message: Eip712MessageSsv = serde_json::from_str(eip712_message_str)
-        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-
-    let domain = eip712_domain! {
-        name: eip712_message.domain.name,
-        version: eip712_message.domain.version,
-        chain_id: eip712_message.domain.chain_id,
-        verifying_contract: eip712_message.domain.verifying_contract,
-    };
-
-    let message = data {
-        userId: eip712_message.message.user_id,
-        userAddress: eip712_message.message.user_address,
-        verifyType: eip712_message.message.verify_type,
-    };
-
-    // let hash = message.eip712_signing_hash(&domain);
-    // let signature = signer.sign_hash(&hash).await?;
-    let signature = signer.sign_typed_data(&message, &domain).await?;
-    Ok(encode(signature.as_bytes()))
-}
-
 impl EthgasExchangeService {
     pub async fn login(self) -> Result<(String, String)> {
         let client = Client::new();
-        let signer = PrivateKeySigner::from_bytes(&self.eoa_signing_key)
-            .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-        info!("your EOA address: {}", signer.clone().address());
+        let signer = match &self.eoa_signer_config {
+            EoaSignerConfig::PrivateKey(signing_key) => EoaSigner::PrivateKey(
+                PrivateKeySigner::from_bytes(signing_key)
+                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?,
+            ),
+            EoaSignerConfig::LedgerPath(path) => EoaSigner::Ledger(
+                LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?,
+            ),
+        };
+        let signer_address = signer.address();
+        info!("your EOA address: {}", signer_address);
         let mut exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/login"
         ))?;
         let mut res = client
             .post(exchange_api_url.to_string())
-            .query(&[("addr", signer.clone().address())])
+            .query(&[("addr", signer_address)])
             .send()
             .await?;
 
@@ -416,7 +297,7 @@ impl EthgasExchangeService {
         res = client
             .post(exchange_api_url.to_string())
             .header("User-Agent", "cb_ethgas_commit")
-            .query(&[("addr", signer.clone().address())])
+            .query(&[("addr", signer_address)])
             .query(&[("nonceHash", eip712_message.message.hash)])
             .query(&[("signature", signature_hex)])
             .send()
@@ -593,7 +474,7 @@ impl EthgasCommitService {
                 };
             let mut ssv_node_operator_owner_tx_hashes: Vec<String> = Vec::new();
             let mut ssv_node_operator_owner_tx_from_addr: Vec<alloy::primitives::Address> = Vec::new();
-            let ssv_node_operator_signers: Vec<SSVSigner> = match &self
+            let ssv_node_operator_signers: Vec<EoaSigner> = match &self
                 .config
                 .extra
                 .ssv_node_operator_owner_mode
@@ -635,12 +516,12 @@ impl EthgasCommitService {
                         for key_byte in ssv_node_operator_owner_signing_keys {
                             let signer = PrivateKeySigner::from_bytes(&key_byte)
                                 .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                            operator_signers.push(EoaSigner::PrivateKey(signer));
                         }
                         operator_signers
                     }
                     "keystore" => {
-                        let operator_signers: Vec<SSVSigner> = match &self
+                        let operator_signers: Vec<EoaSigner> = match &self
                             .config
                             .extra
                             .ssv_node_operator_owner_keystores
@@ -659,7 +540,7 @@ impl EthgasCommitService {
                                         .map_err(|e| {
                                             eyre::eyre!("Failed to create signer: {}", e)
                                         })?;
-                                    operator_signers.push(SSVSigner::PrivateKey(signer));
+                                    operator_signers.push(EoaSigner::PrivateKey(signer));
                                 }
                                 operator_signers
                             }
@@ -696,7 +577,7 @@ impl EthgasCommitService {
                                                 .map_err(|e| {
                                                     eyre::eyre!("Failed to create signer: {}", e)
                                                 })?;
-                                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                                            operator_signers.push(EoaSigner::PrivateKey(signer));
                                         }
                                         operator_signers
                                     }
@@ -733,7 +614,7 @@ impl EthgasCommitService {
                         for path in ssv_node_operator_owner_ledger_paths {
                             let signer =
                                 LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
-                            operator_signers.push(SSVSigner::Ledger(signer));
+                            operator_signers.push(EoaSigner::Ledger(signer));
                         }
                         operator_signers
                     }
@@ -746,7 +627,7 @@ impl EthgasCommitService {
                                         "ssv_node_operator_owner_tx_hashes cannot be empty",
                                     )
                                     .into())
-                                },
+                                }
                             };
                         if ssv_node_operator_owner_tx_hashes.is_empty() {
                             return Err(std::io::Error::other(
@@ -762,7 +643,7 @@ impl EthgasCommitService {
                                         "ssv_node_operator_owner_tx_from_addr cannot be empty",
                                     )
                                     .into())
-                                },
+                                }
                             };
                         if ssv_node_operator_owner_tx_from_addr.is_empty() {
                             return Err(std::io::Error::other(
@@ -779,8 +660,8 @@ impl EthgasCommitService {
                         for _tx_hash in &ssv_node_operator_owner_tx_hashes {
                             // as placeholder signers
                             let signer = PrivateKeySigner::from_bytes(&FixedBytes::<32>::from([1u8; 32]))
-                                .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-                            operator_signers.push(SSVSigner::PrivateKey(signer));
+                                    .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
+                            operator_signers.push(EoaSigner::PrivateKey(signer));
                         }
                         operator_signers
                     }
@@ -834,23 +715,19 @@ impl EthgasCommitService {
                             }
                             false => {
                                 if result.error_msg_key.clone().unwrap_or_default() == "error.ssv.operator.registered" {
-                                    warn!(
-                                        "ssv node operator owner address has been registered"
-                                );
+                                    warn!("ssv node operator owner address has been registered");
                                 } else {
                                     error!(
                                         "failed to register ssv node operator owner address: {}",
                                         result.error_msg_key.unwrap_or_default()
                                     );
                                 }
-
                             }
                         },
                         Err(err) => {
                             error!(?err, "failed to call ssv operator verify by tx API");
                         }
                     }
-
                 } else {
                     let signer = &ssv_node_operator_signers[i];
                     ssv_node_operator_owner_address = signer.address();
@@ -890,7 +767,7 @@ impl EthgasCommitService {
                         }
                     };
                     if res_json_ssv_node_operator_register.data.available {
-                        let signature_hex = generate_eip712_signature_for_ssv(
+                        let signature_hex = generate_eip712_signature_for_dvt(
                             &res_json_ssv_node_operator_register
                                 .data
                                 .message_to_sign
@@ -915,16 +792,16 @@ impl EthgasCommitService {
 
                         match res.json::<APISsvNodeOperatorVerifyResponse>().await {
                             Ok(result) => match result.success {
-                                true => {
-                                    info!("successfully registered ssv node operator owner address");
-                                }
-                                false => {
-                                    error!(
+                                    true => {
+                                        info!("successfully registered ssv node operator owner address");
+                                    }
+                                    false => {
+                                        error!(
                                         "failed to register ssv node operator owner address: {}",
                                         result.error_msg_key.unwrap_or_default()
                                     );
+                                    }
                                 }
-                            },
                             Err(err) => {
                                 error!(?err, "failed to call ssv operator verify API");
                             }
@@ -1371,11 +1248,12 @@ impl EthgasCommitService {
         match res.json::<APISsvValidatorDeregisterResponse>().await {
             Ok(result) => match result.success {
                 true => {
-                    if result.data.removed.is_empty() {
+                    let result_data_removed = result.data.removed.unwrap_or_default();
+                    if result_data_removed.is_empty() {
                         warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
                     } else {
                         info!("successful deregistration");
-                        info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
+                        info!(number = result_data_removed.len(), deregistered_validators = ?result_data_removed);
                     }
                 }
                 false => {
@@ -1443,34 +1321,49 @@ async fn main() -> Result<()> {
                 let access_jwt: String;
                 let refresh_jwt: String;
                 if !config.extra.is_jwt_provided {
-                    let exchange_service = EthgasExchangeService {
-                        exchange_api_base: config.extra.exchange_api_base.clone(),
-                        entity_name: config.extra.entity_name.clone(),
-                        eoa_signing_key: match config.extra.eoa_signing_key {
-                            Some(eoa) => eoa,
-                            None => match env::var("EOA_SIGNING_KEY") {
-                                Ok(eoa) => B256::from_str(&eoa).map_err(|_| {
+                    let eoa_signer_config = match (
+                        config.extra.eoa_signing_key,
+                        config.extra.eoa_ledger_path.clone(),
+                    ) {
+                        (Some(_), Some(_)) => {
+                            error!(
+                                "Config eoa_signing_key and eoa_ledger_path are mutually exclusive"
+                            );
+                            return Err(
+                                std::io::Error::other("conflicting eoa signer config").into()
+                            );
+                        }
+                        (Some(eoa_signing_key), None) => EoaSignerConfig::PrivateKey(eoa_signing_key),
+                        (None, Some(eoa_ledger_path)) => EoaSignerConfig::LedgerPath(eoa_ledger_path),
+                        (None, None) => match env::var("EOA_SIGNING_KEY") {
+                            Ok(eoa_signing_key) => {
+                                EoaSignerConfig::PrivateKey(B256::from_str(&eoa_signing_key).map_err(|_| {
                                     error!("Invalid EOA_SIGNING_KEY format");
                                     std::io::Error::new(
                                         std::io::ErrorKind::InvalidData,
                                         "EOA_SIGNING_KEY format error",
                                     )
-                                })?,
-                                Err(_) => {
-                                    error!("Config eoa_signing_key is required. Please set EOA_SIGNING_KEY environment variable or provide it in the config file");
-                                    return Err(
-                                        std::io::Error::other("eoa_signing_key missing").into()
-                                    );
-                                }
-                            },
+                                })?)
+                            }
+                            Err(_) => {
+                                error!("Please set EOA_SIGNING_KEY environment variable or provide eoa_signing_key or eoa_ledger_path in the config file");
+                                return Err(
+                                    std::io::Error::other("EOA_SIGNING_KEY/eoa_signing_key or eoa_ledger_path is missing").into()
+                                );
+                            }
                         },
+                    };
+                    let exchange_service = EthgasExchangeService {
+                        exchange_api_base: config.extra.exchange_api_base.clone(),
+                        entity_name: config.extra.entity_name.clone(),
+                        eoa_signer_config,
                     };
                     (access_jwt, refresh_jwt) =
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
                             let service = EthgasExchangeService {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
                                 entity_name: exchange_service.entity_name.clone(),
-                                eoa_signing_key: exchange_service.eoa_signing_key,
+                                eoa_signer_config: exchange_service.eoa_signer_config.clone(),
                             };
                             service.login().await.map_err(|err| {
                                 error!(?err, "Service failed");
