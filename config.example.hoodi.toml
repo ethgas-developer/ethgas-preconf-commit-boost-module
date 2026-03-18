@@ -354,10 +354,11 @@ enable_ofac = false
 # REQUIRED
 collateral_per_slot = "0"
 
-# Address of the fee recipient for receiving payout if ETHGas collateral 
-# contract (EthgasPool) address is set as the validator fee recipient.
+# Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
+# is set as the fee recipient in the beacon node or validator client
+# More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
 # OPTIONAL
-# payout_address = "0x..."
+payout_address = "0x..."
 
 # A builder pubkey is required as a default, even when it is not used by the validator.
 # REQUIRED

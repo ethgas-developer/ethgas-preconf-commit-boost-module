@@ -26,7 +26,7 @@ use prometheus::{IntCounter, Registry};
 use reqwest::{Client, Response, Url};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, env, error::Error, str::FromStr, time::Duration};
+use std::{collections::{HashMap, HashSet}, env, error::Error, str::FromStr, time::Duration};
 use tokio::time::sleep;
 use tokio_retry::{strategy::FixedInterval, Retry};
 use tracing::{error, info, warn};
@@ -948,11 +948,7 @@ impl EthgasCommitService {
                             .send()
                             .await?;
 
-                        let pubkeys_str_list = ssv_node_operator_owner_validator_pubkeys[i]
-                            .iter()
-                            .map(|key| key.to_string())
-                            .collect::<Vec<String>>()
-                            .join(",");
+                        let pubkeys_str_list = String::new();
 
                         self.ssv_validator_register_response(
                             res,
@@ -1507,16 +1503,20 @@ async fn main() -> Result<()> {
 
                 let mux_pubkeys = match pbs_config.mux_lookup {
                     Some(mux_map) => {
-                        let mut vec = Vec::new();
-                        for (key, value) in mux_map.iter() {
-                            for relay in value.relays.iter() {
-                                if relay.id.contains("ethgas") {
-                                    vec.push(BlsPublicKey::from(key.to_owned()));
-                                    break;
+                        let mut seen = HashSet::new();
+                        mux_map
+                            .iter()
+                            .filter_map(|(key, value)| {
+                                let matches = value.id.contains("ethgas") || value.relays.iter().any(|relay| relay.id.contains("ethgas"));
+
+                                if matches {
+                                    let pk = BlsPublicKey::from(key.to_owned());
+                                    seen.insert(pk.clone()).then_some(pk)
+                                } else {
+                                    None
                                 }
-                            }
-                        }
-                        vec
+                            })
+                            .collect::<Vec<_>>()
                     }
                     None => Vec::new(),
                 };
