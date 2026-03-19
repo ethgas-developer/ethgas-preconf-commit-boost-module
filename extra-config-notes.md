@@ -20,10 +20,7 @@
       - Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_SIGNING_KEYS` as an env variable in `.cb.env`
     - For the `keystore` mode, set keystore configurations under `ssv_node_operator_owner_keystores` array where each entry contains both `keystore_path` and `password_path`
       - Alternatively, you can set `SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS` and `SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS` as env variables in `.cb.env`
-    - For the `ledger` mode, only set one derivation path in `ssv_node_operator_owner_ledger_paths` array
-      - if you are using Mac, you can only run the program in native rust as Docker cannot support native ledger connection in Mac
-        - export all env variables of `.cb.env` in the terminal
-        - run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
+    - For the `ledger` mode, only set one derivation path in `ssv_node_operator_owner_ledger_paths` array. Find out more in [Ledger connection issue](#ledger-connection-issue)
     - For the `tx` mode, you could create an on-chain transaction using your ssv node operator owner address to prove your ownership. Please create a transaction with from and to address equal to your ssv node operator owner address, value equal to 0 and input data field equal to your ETHGas account address followed by `45544847617320535356204f70657261746f7220566572696679` which is the hex format of `ETHGas SSV Operator Verify` where your ETHGas account address is derived from your configured EOA login signer below (`eoa_signing_key` or `eoa_ledger_path`). For example, if your ETHGas account address is `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266`, then your input data of the transaction should be equal to `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb9226645544847617320535356204f70657261746f7220566572696679`. After the transaction has been confirmed, put the transaction hash under `ssv_node_operator_owner_tx_hashes` array and put the ssv node operator owner address under `ssv_node_operator_owner_tx_from_addr`
     - specify validator public keys under `ssv_node_operator_owner_validator_pubkeys` or set it as `[]` to indicate the registration of all associated validator public keys obtained via SSV official API
     - if node operators within a cluster are associated with different owner addresses which are all owned by you, please put all signing keys of those owner addresses under the `ssv_node_operator_owner_signing_keys` array. This can ensure our exchange will open markets for your ssv validators even when the leading node operator rotates within the cluster.
@@ -32,6 +29,7 @@
     - if you are a node operator with validators from multiple pools, please use a different EOA account for validators from different pools.
     - Alternatively, you can set `EOA_SIGNING_KEY` or `ACCESS_JWT` & `REFRESH_JWT` as env variables in `.cb.env`
     - You can generate a completely new EOA address to serve as the ETHGas Exchange account
+    - For ledger login, find out more in [Ledger connection issue](#ledger-connection-issue)
   - set `enable_pricer = true` if you want to delegate to our default pricer to help you to sell preconfs
   - set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
   - set `enable_ofac = true` if your validators only accept ofac-compliant blocks. This is a pubkey-specific setting so you could specify list of pubkeys in `[[mux]].validator_pubkeys` or `ssv_node_operator_owner_validator_pubkeys`.
@@ -95,7 +93,12 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 
 - For WETH, put the WETH address of the respective network in the `token` field and specify the `amount` inside the `TokenTransfer` struct. For native ETH, put an empty struct and specify the amount in the value field
 
-## Debug cb_ethgas_commit locally
+## Troubleshoot
+### Ledger connection issue
+- for any ledger related operation, if you are using Mac, you can only run the program in native rust as Docker cannot support native ledger connection in Mac
+  - export all env variables of `.cb.env` in the terminal
+  - run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
 
+### Debug cb_ethgas_commit locally
 - To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
 - Then run `docker compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
