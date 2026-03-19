@@ -109,6 +109,7 @@ url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93
 # get_params = { param1 = "value1", param2 = "value2" }
 
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
+# NOTE: if neither `target_first_request_ms` nor `frequency_get_header_ms` is set, this flag has no effect.
 # These values should be carefully chosen for each relay, 
 # as each relay has different latency and timing games setups.
 # They should only be used by advanced users, and if mis-configured 
@@ -180,10 +181,10 @@ validator_registration_batch_size = ""
 # loader = { url = "http://localhost:8000/keys" }
 
 # Example of loading keys from the Lido registry
-# loader = { registry = "lido", node_operator_id = 8 }
+# loader = { registry = "lido", node_operator_id = 8, lido_module_id = 1, enable_refreshing = false }
 
 # Example of loading keys from an SSV API
-# loader = { registry = "ssv", node_operator_id = 8 }
+# loader = { registry = "ssv", node_operator_id = 8, enable_refreshing = false }
 
 # OPTIONAL
 # timeout_get_header_ms = 950
@@ -240,6 +241,9 @@ jwt_auth_fail_timeout_seconds = 300
 # Path to the CA certificate that signed the Dirk server certificate.
 # OPTIONAL
 # ca_cert_path = "/path/to/ca.crt"
+# Limits the maximum size of a decoded gRPC response
+# OPTIONAL. Default: 4MB
+# max_response_size_bytes = 4194304
 
 # Add one entry like this for each Dirk host.
 # [[signer.dirk.hosts]]
@@ -307,7 +311,7 @@ secrets_path = "/path/to/data_validator/secrets"
 id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
+docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
 
 # REQUIRED
 exchange_api_base = "https://hoodi.app.ethgas.com"
@@ -446,7 +450,7 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 id = "ETHGAS_DEPOSIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
+docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
 
 # REQUIRED
 block_confirmation = 12
