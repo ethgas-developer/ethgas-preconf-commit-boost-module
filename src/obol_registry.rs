@@ -1,44 +1,22 @@
-use crate::{models::KeystoreConfig, ofac::update_ofac};
+use crate::{
+    login_types::EoaSigner,
+    dvt_types::KeystoreConfig,
+    ofac::update_ofac,
+    utils::generate_eip712_signature_for_dvt
+};
 use alloy::{
-    hex::encode,
-    primitives::{Signature, B256},
+    primitives::B256,
     signers::{
         ledger::{HDPath, LedgerSigner},
         local::PrivateKeySigner,
-        Error as SignerError, Signer,
     },
-    sol,
-    sol_types::{eip712_domain, Eip712Domain},
 };
 use commit_boost::prelude::BlsPublicKey;
 use eyre::Result;
 use reqwest::{Client, Url};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{env, error::Error, str::FromStr};
 use tracing::{error, info, warn};
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct MessageObol {
-    user_id: String,
-    user_address: String,
-    verify_type: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Domain {
-    name: String,
-    version: String,
-    chain_id: u64,
-    verifying_contract: alloy::primitives::Address,
-}
-
-#[derive(Debug, Deserialize)]
-struct Eip712MessageObol {
-    message: MessageObol,
-    domain: Domain,
-}
 
 #[derive(Debug, Deserialize)]
 struct APIObolNodeOperatorRegisterResponse {
@@ -93,65 +71,6 @@ struct APIObolValidatorDeregisterResponseData {
     removed: Vec<BlsPublicKey>,
 }
 
-enum ObolSigner {
-    PrivateKey(PrivateKeySigner),
-    Ledger(LedgerSigner),
-}
-
-impl ObolSigner {
-    pub fn address(&self) -> alloy::primitives::Address {
-        match self {
-            ObolSigner::Ledger(signer) => signer.address(),
-            ObolSigner::PrivateKey(signer) => signer.address(),
-        }
-    }
-
-    pub async fn sign_typed_data(
-        &self,
-        message: &data,
-        domain: &Eip712Domain,
-    ) -> Result<Signature, SignerError> {
-        match self {
-            ObolSigner::Ledger(signer) => signer.sign_typed_data(message, domain).await,
-            ObolSigner::PrivateKey(signer) => signer.sign_typed_data(message, domain).await,
-        }
-    }
-}
-
-sol! {
-    #[allow(missing_docs)]
-    #[derive(Serialize)]
-    struct data {
-        string userId;
-        string userAddress;
-        string verifyType;
-    }
-}
-
-async fn generate_eip712_signature_for_obol(
-    eip712_message_str: &str,
-    signer: &ObolSigner,
-) -> Result<String> {
-    let eip712_message: Eip712MessageObol = serde_json::from_str(eip712_message_str)
-        .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-
-    let domain = eip712_domain! {
-        name: eip712_message.domain.name,
-        version: eip712_message.domain.version,
-        chain_id: eip712_message.domain.chain_id,
-        verifying_contract: eip712_message.domain.verifying_contract,
-    };
-
-    let message = data {
-        userId: eip712_message.message.user_id,
-        userAddress: eip712_message.message.user_address,
-        verifyType: eip712_message.message.verify_type,
-    };
-
-    let signature = signer.sign_typed_data(&message, &domain).await?;
-    Ok(encode(signature.as_bytes()))
-}
-
 pub async fn register_obol_keys(
     client: &Client,
     access_jwt: &str,
@@ -176,7 +95,7 @@ pub async fn register_obol_keys(
                 .into())
             }
         };
-    let obol_node_operator_signers: Vec<ObolSigner> =
+    let obol_node_operator_signers: Vec<EoaSigner> =
         match config_extra_obol_node_operator_owner_mode {
             Some(mode) => match mode.as_str() {
                 "key" => {
@@ -215,12 +134,12 @@ pub async fn register_obol_keys(
                     for key_byte in obol_node_operator_owner_signing_keys {
                         let signer = PrivateKeySigner::from_bytes(&key_byte)
                             .map_err(|e| eyre::eyre!("Failed to create signer: {}", e))?;
-                        operator_signers.push(ObolSigner::PrivateKey(signer));
+                        operator_signers.push(EoaSigner::PrivateKey(signer));
                     }
                     operator_signers
                 }
                 "keystore" => {
-                    let operator_signers: Vec<ObolSigner> =
+                    let operator_signers: Vec<EoaSigner> =
                         match config_extra_obol_node_operator_owner_keystores {
                             Some(keystores) => {
                                 let mut operator_signers = Vec::new();
@@ -236,7 +155,7 @@ pub async fn register_obol_keys(
                                         .map_err(|e| {
                                             eyre::eyre!("Failed to create signer: {}", e)
                                         })?;
-                                    operator_signers.push(ObolSigner::PrivateKey(signer));
+                                    operator_signers.push(EoaSigner::PrivateKey(signer));
                                 }
                                 operator_signers
                             }
@@ -271,7 +190,7 @@ pub async fn register_obol_keys(
                                             .map_err(|e| {
                                                 eyre::eyre!("Failed to create signer: {}", e)
                                             })?;
-                                            operator_signers.push(ObolSigner::PrivateKey(signer));
+                                            operator_signers.push(EoaSigner::PrivateKey(signer));
                                         }
                                         operator_signers
                                     }
@@ -308,7 +227,7 @@ pub async fn register_obol_keys(
                     for path in obol_node_operator_owner_ledger_paths {
                         let signer =
                             LedgerSigner::new(HDPath::Other(path.to_string()), Some(1)).await?;
-                        operator_signers.push(ObolSigner::Ledger(signer));
+                        operator_signers.push(EoaSigner::Ledger(signer));
                     }
                     operator_signers
                 }
@@ -372,7 +291,7 @@ pub async fn register_obol_keys(
             }
         };
         if res_json_obol_node_operator_register.data.available {
-            let signature_hex = generate_eip712_signature_for_obol(
+            let signature_hex = generate_eip712_signature_for_dvt(
                 &res_json_obol_node_operator_register
                     .data
                     .message_to_sign

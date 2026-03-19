@@ -109,6 +109,7 @@ url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b
 # get_params = { param1 = "value1", param2 = "value2" }
 
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
+# NOTE: if neither `target_first_request_ms` nor `frequency_get_header_ms` is set, this flag has no effect.
 # These values should be carefully chosen for each relay, 
 # as each relay has different latency and timing games setups.
 # They should only be used by advanced users, and if mis-configured 
@@ -194,10 +195,10 @@ frequency_get_header_ms = 100
 # loader = { url = "http://localhost:8000/keys" }
 
 # Example of loading keys from the Lido registry
-# loader = { registry = "lido", node_operator_id = 8 }
+# loader = { registry = "lido", node_operator_id = 8, lido_module_id = 1, enable_refreshing = false }
 
 # Example of loading keys from an SSV API
-# loader = { registry = "ssv", node_operator_id = 8 }
+# loader = { registry = "ssv", node_operator_id = 8, enable_refreshing = false }
 
 # OPTIONAL
 # timeout_get_header_ms = 950
@@ -271,6 +272,9 @@ jwt_auth_fail_timeout_seconds = 300
 # Path to the CA certificate that signed the Dirk server certificate.
 # OPTIONAL
 # ca_cert_path = "/path/to/ca.crt"
+# Limits the maximum size of a decoded gRPC response
+# OPTIONAL. Default: 4MB
+# max_response_size_bytes = 4194304
 
 # Add one entry like this for each Dirk host.
 # [[signer.dirk.hosts]]
@@ -338,7 +342,7 @@ secrets_path = "/path/to/data_validator/secrets"
 id = "ETHGAS_COMMIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_commit:latest"
+docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
 
 # REQUIRED
 exchange_api_base = "https://mainnet.app.ethgas.com"
@@ -385,10 +389,11 @@ enable_ofac = false
 # REQUIRED
 collateral_per_slot = "0"
 
-# Address of the fee recipient for receiving payout if ETHGas collateral 
-# contract (EthgasPool) address is set as the validator fee recipient.
+# Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
+# is set as the fee recipient in the beacon node or validator client
+# More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
 # OPTIONAL
-# payout_address = "0x..."
+payout_address = "0x..."
 
 # A builder pubkey is required as a default, even when it is not used by the validator.
 # REQUIRED
@@ -404,10 +409,11 @@ is_jwt_provided = false
 # REQUIRED
 query_pubkey = true
 
-# Specify either eoa_signing_key or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
+# Specify either eoa_signing_key/eoa_ledger_path or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables.
 # OPTIONAL
-eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false
+eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_provided = false and eoa_ledger_path is not set
+# eoa_ledger_path = "m/44'/60'/0'/0" # for registration in exchange with Ledger, required if is_jwt_provided = false and eoa_signing_key is not set
 
 # OPTIONAL
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
@@ -475,7 +481,7 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 id = "ETHGAS_DEPOSIT"
 type = "commit"
 env_file = ".cb.env"
-docker_image = "ghcr.io/ethgas-developer/commitboost_ethgas_deposit:latest"
+docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
 
 # REQUIRED
 block_confirmation = 12

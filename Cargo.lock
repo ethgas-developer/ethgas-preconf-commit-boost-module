@@ -2091,8 +2091,8 @@ dependencies = [
 
 [[package]]
 name = "cb-cli"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "cb-common",
  "clap",
@@ -2104,8 +2104,8 @@ dependencies = [
 
 [[package]]
 name = "cb-common"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "aes 0.8.4",
  "alloy",
@@ -2126,6 +2126,7 @@ dependencies = [
  "eyre",
  "futures",
  "jsonwebtoken",
+ "lazy_static",
  "pbkdf2 0.12.2",
  "rand 0.9.2",
  "rayon",
@@ -2151,8 +2152,8 @@ dependencies = [
 
 [[package]]
 name = "cb-metrics"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "axum 0.8.4",
  "cb-common",
@@ -2165,8 +2166,8 @@ dependencies = [
 
 [[package]]
 name = "cb-pbs"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "alloy",
  "async-trait",
@@ -2192,8 +2193,8 @@ dependencies = [
 
 [[package]]
 name = "cb-signer"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "alloy",
  "axum 0.8.4",
@@ -2277,9 +2278,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.41"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be92d32e80243a54711e5d7ce823c35c41c9d929dc4ab58e1276f625841aadf9"
+checksum = "2797f34da339ce31042b27d23607e051786132987f595b02ba4f6a6dffb7030a"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -2287,9 +2288,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.41"
+version = "4.5.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "707eab41e9622f9139419d573eca0900137718000c517d47da73045f54331c3d"
+checksum = "24a241312cea5059b13574bb9b3861cabf758b879c15190b37b6d6fd63ab6876"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2299,9 +2300,9 @@ dependencies = [
 
 [[package]]
 name = "clap_derive"
-version = "4.5.41"
+version = "4.5.55"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef4f52386a59ca4c860f7393bcf8abd8dfd91ecccc0f774635ff68e92eeef491"
+checksum = "a92793da1a46a5f2a02a6f4c46c6496b28c43638adea8306fcb0caa1634f24e5"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -2311,9 +2312,9 @@ dependencies = [
 
 [[package]]
 name = "clap_lex"
-version = "0.7.5"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b94f61472cee1439c0b966b47e3aca9ae07e45d070759512cd390ea2bebc6675"
+checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
 
 [[package]]
 name = "coins-ledger"
@@ -2373,8 +2374,8 @@ checksum = "b05b61dc5112cbb17e4b6cd61790d9845d13888356391624cbe7e41efeac1e75"
 
 [[package]]
 name = "commit-boost"
-version = "0.9.2"
-source = "git+https://github.com/Commit-Boost/commit-boost-client#29398f6b130d2f3a59596fafa4c28299d356704a"
+version = "0.9.3"
+source = "git+https://github.com/Commit-Boost/commit-boost-client?rev=a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19#a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19"
 dependencies = [
  "cb-cli",
  "cb-common",
@@ -3449,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "ethgas_commit_boost_modules"
-version = "1.0.4"
+version = "1.0.5"
 dependencies = [
  "alloy",
  "axum 0.8.4",
