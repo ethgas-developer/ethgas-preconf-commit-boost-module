@@ -2,7 +2,7 @@ use crate::{
     login_types::EoaSigner,
     dvt_types::KeystoreConfig,
     ofac::update_ofac,
-    utils::generate_eip712_signature_for_dvt
+    utils::{generate_eip712_signature_for_dvt, update_payout_address}
 };
 use alloy::{
     primitives::B256,
@@ -84,6 +84,7 @@ pub async fn register_obol_keys(
     config_extra_obol_node_operator_owner_keystores: &Option<Vec<KeystoreConfig>>,
     config_extra_obol_node_operator_owner_ledger_paths: &Option<Vec<String>>,
     config_extra_obol_node_operator_owner_validator_pubkeys: &Option<Vec<Vec<BlsPublicKey>>>,
+    config_extra_obol_node_operator_owner_payout_addresses: &Option<Vec<alloy::primitives::Address>>,
 ) -> Result<(), Box<dyn Error>> {
     let obol_node_operator_owner_validator_pubkeys =
         match config_extra_obol_node_operator_owner_validator_pubkeys {
@@ -248,6 +249,12 @@ pub async fn register_obol_keys(
         return Err(std::io::Error::other("obol_node_operator_owner_signing_keys & obol_node_operator_owner_validator_pubkeys should have same array length").into());
     }
 
+    if let Some(ref payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
+        if obol_node_operator_signers.len() != payout_addresses.len() {
+            return Err(std::io::Error::other("obol_node_operator_owner_payout_addresses should have same array length as obol_node_operator_owner_signing_keys").into());
+        }
+    }
+
     for i in 0..obol_node_operator_signers.len() {
         let signer = &obol_node_operator_signers[i];
         let obol_node_operator_owner_address = signer.address();
@@ -406,16 +413,32 @@ pub async fn register_obol_keys(
                                         info!("successful registration, you can now sell preconfs on ETHGas");
                                     }
                                     let result_data_validators = result.data.added.unwrap_or_default();
-                                    info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
-
+                                    info!(registered_validators = ?result_data_validators, number = result_data_validators.len());
+                                    let validators_str = result_data_validators
+                                        .iter()
+                                        .map(|v| v.to_string())
+                                        .collect::<Vec<_>>()
+                                        .join(",");
+                                    
                                     update_ofac(
                                         client,
                                         config_extra_registration_mode,
                                         config_extra_exchange_api_base,
                                         access_jwt,
                                         config_extra_enable_ofac,
-                                        pubkeys_str_list,
+                                        &validators_str,
                                     ).await?;
+
+                                    if let Some(ref payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
+                                        update_payout_address(
+                                            client,
+                                            config_extra_registration_mode,
+                                            config_extra_exchange_api_base,
+                                            access_jwt,
+                                            payout_addresses[i],
+                                            &validators_str,
+                                        ).await?;
+                                    }
                                 }
                             }
                         },
@@ -460,7 +483,7 @@ pub async fn register_obol_keys(
                             warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
                         } else {
                             info!("successful deregistration");
-                            info!(number = result.data.removed.len(), deregistered_validators = ?result.data.removed);
+                            info!(deregistered_validators = ?result.data.removed, number = result.data.removed.len());
                         }
                     }
                     false => {

@@ -361,6 +361,10 @@ collateral_per_slot = "0"
 # Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
 # is set as the fee recipient in the beacon node or validator client
 # More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
+# This config is applicable on a per-validator key basis. 
+# If `[[mux]]` is enabled, only the payout addresses of the validator keys specified in `[[mux]].validator_pubkeys` will be updated; 
+# other validator keys will retain their existing payout address
+# For ssv or obol validators, please check the config in the section below
 # OPTIONAL
 payout_address = "0x..."
 
@@ -421,6 +425,11 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     [ "0x...", "0x..." ],
 #     [ "0x..." ]
 # ]
+# ssv_node_operator_owner_payout_addresses = [
+#     "0x...",
+#     "0x...",
+#     "0x..."
+# ]
 # below configs are only for obol validators
 # obol_node_operator_owner_mode = "key" # key, keystore, ledger
 # obol_node_operator_owner_signing_keys = [
@@ -443,6 +452,11 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     [], # this will trigger the registration of all associated BLS pubkeys obtained from OBOL API
 #     [ "0x...", "0x..." ],
 #     [ "0x..." ]
+# ]
+# obol_node_operator_owner_payout_addresses = [
+#     "0x...",
+#     "0x...",
+#     "0x..."
 # ]
 
 # required only if cb_ethgas_deposit is run
