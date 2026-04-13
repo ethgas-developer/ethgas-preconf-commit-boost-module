@@ -60,7 +60,7 @@ pub async fn update_payout_address(
         match res.json::<APIUpdatePayoutAddrResponse>().await {
             Ok(res_json) => {
                 if res_json.success {
-                    info!("batch {}: successfully updated payout address to {} for the above registered validators", i + 1, payout_address);
+                    info!("successfully updated payout address to {} for the above registered validators", payout_address);
                 } else {
                     error!(
                         "failed to update payout address: {}",
