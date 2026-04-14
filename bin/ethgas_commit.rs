@@ -105,15 +105,9 @@ struct RegisteredInfo {
     eoa_address: alloy::primitives::Address,
 }
 
-#[derive(Debug, TreeHash, Deserialize)]
-struct SigningData {
-    object_root: [u8; 32],
-    signing_domain: [u8; 32],
-}
-
 #[derive(Debug, Deserialize)]
 struct APILoginResponse {
-    success: bool,
+    // success: bool,
     data: APILoginResponseData,
 }
 
@@ -137,7 +131,7 @@ struct APILoginVerifyResponseData {
 
 #[derive(Debug, Deserialize)]
 struct APIUserUpdateResponse {
-    success: bool,
+    // success: bool,
     data: APIUserUpdateResponseData,
 }
 
@@ -159,7 +153,7 @@ struct AccessToken {
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponse {
-    success: bool,
+    // success: bool,
     data: APIValidatorRegisterResponseData,
 }
 
@@ -190,7 +184,7 @@ struct APIValidatorVerifyBatchResponse {
 #[derive(Debug, Deserialize)]
 struct ValidatorVerifyResult {
     result: u8,
-    description: String,
+    // description: String,
 }
 
 #[derive(Debug, Deserialize)]

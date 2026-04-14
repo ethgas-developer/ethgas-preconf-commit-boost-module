@@ -43,7 +43,7 @@ pub async fn update_payout_address(
 
     let pubkeys: Vec<&str> = pubkeys_str.split(',').collect();
 
-    for (i, chunk) in pubkeys.chunks(100).enumerate() {
+    for (_i, chunk) in pubkeys.chunks(100).enumerate() {
         let chunk_str = chunk.join(",");
         let mut form_data = HashMap::new();
         form_data.insert("publicKeys".to_string(), chunk_str);

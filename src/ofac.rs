@@ -53,9 +53,9 @@ pub async fn update_ofac(
             Ok(res_json) => {
                 if res_json.success {
                     if enable_ofac {
-                        info!("batch {}: successfully enabled ofac for the above registered validators", i + 1);
+                        info!("successfully enabled ofac for the above registered validators");
                     } else {
-                        info!("batch {}: successfully disabled ofac for the above registered validators", i + 1);
+                        info!("successfully disabled ofac for the above registered validators");
                     }
                 } else if enable_ofac {
                     error!(
