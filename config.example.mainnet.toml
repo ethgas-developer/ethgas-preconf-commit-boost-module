@@ -161,6 +161,59 @@ enable_timing_games = true
 target_first_request_ms = 0
 frequency_get_header_ms = 100
 
+# external relays are only useful if ETHGas collateral contract (EthgasPool) address
+# is set as the fee recipient in the beacon node or validator client
+# More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
+
+# [[relays]]
+# id = "flashbots"
+# url = "https://0xac6e77dfe25ecd6110b8e780608cce0dab71fdd5ebea22a16c0205200f2f8e2e3ad3b71d3499c54ad14d6c21b41a37ae@boost-relay.flashbots.net"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "ultrasound"
+# url = "https://0xa1559ace749633b997cb3fdacffb890aeebdb0f5a3b6aaa7eeeaf1a38af0a8fe88b9e4b1f61f236d2e64d95733327a62@relay.ultrasound.money"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "titan"
+# url = "https://0x8c4ed5e24fe5c6ae21018437bde147693f68cda427cd1122cf20819c30eda7ed74f72dece09bb313f2a1855595ab677d@titanrelay.xyz"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "bloxroute-max-profit"
+# url = "https://0x8b5d2e73e2a3a55c6c87b8b6eb92e0149a125c852751db1422fa951e42a09b82c142c3ea98d0d9930b056a3bc9896b8f@bloxroute.max-profit.blxrbdn.com"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "bloxroute-regulated"
+# url = "https://0xb0b07cd0abef743db4260b0ed50619cf6ad4d82064cb4fbec9d3ec530f7c5e6793d9f286c4e082c0244ffb9f2658fe88@bloxroute.regulated.blxrbdn.com"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "aestus"
+# url = "https://0xa15b52576bcbf1072f4a011c0f99f9fb6c66f3e1ff321f11f461d15e31b1cb359caa092c71bbded0bae5b5ea401aab7e@aestus.live"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
+# [[relays]]
+# id = "agnostic"
+# url = "https://0xa7ab7a996c8584251c8f925da3170bdfd6ebc75d50f5ddc4050a6fdc77f2a3b5fce2cc750d0865e05d7228af97d69561@agnostic-relay.net"
+# enable_timing_games = true
+# target_first_request_ms = 200
+# frequency_get_header_ms = 200
+
 # Configuration for the PBS multiplexers, which enable different 
 # configs to be used for get header requests, depending on validator pubkey.
 # Note that:
@@ -392,6 +445,10 @@ collateral_per_slot = "0"
 # Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
 # is set as the fee recipient in the beacon node or validator client
 # More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
+# This config is applicable on a per-validator key basis. 
+# If `[[mux]]` is enabled, only the payout addresses of the validator keys specified in `[[mux]].validator_pubkeys` will be updated; 
+# other validator keys will retain their existing payout address
+# For ssv or obol validators, please check the config in the section below
 # OPTIONAL
 payout_address = "0x..."
 
@@ -452,6 +509,11 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     [ "0x...", "0x..." ],
 #     [ "0x..." ]
 # ]
+# ssv_node_operator_owner_payout_addresses = [
+#     "0x...",
+#     "0x...",
+#     "0x..."
+# ]
 # below configs are only for obol validators
 # obol_node_operator_owner_mode = "key" # key, keystore, ledger
 # obol_node_operator_owner_signing_keys = [
@@ -474,6 +536,11 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 #     [], # this will trigger the registration of all associated BLS pubkeys obtained from OBOL API
 #     [ "0x...", "0x..." ],
 #     [ "0x..." ]
+# ]
+# obol_node_operator_owner_payout_addresses = [
+#     "0x...",
+#     "0x...",
+#     "0x..."
 # ]
 
 # required only if cb_ethgas_deposit is run

@@ -64,18 +64,6 @@ struct ExtraConfig {
     eoa_signing_key: Option<B256>,
 }
 
-#[derive(Debug, TreeHash, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct RegisteredInfo {
-    eoa_address: alloy::primitives::Address,
-}
-
-#[derive(Debug, TreeHash, Deserialize)]
-struct SigningData {
-    object_root: [u8; 32],
-    signing_domain: [u8; 32],
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Domain {
@@ -110,7 +98,7 @@ struct Eip712Message {
 
 #[derive(Debug, Deserialize)]
 struct APILoginResponse {
-    success: bool,
+    // success: bool,
     data: APILoginResponseData,
 }
 
@@ -122,7 +110,7 @@ struct APILoginResponseData {
 
 #[derive(Debug, Deserialize)]
 struct APILoginVerifyResponse {
-    success: bool,
+    // success: bool,
     data: APILoginVerifyResponseData,
 }
 
@@ -170,7 +158,7 @@ struct Deposit {
 
 #[derive(Debug, Deserialize)]
 struct DepositQuantity {
-    a: alloy::primitives::Address,
+    // a: alloy::primitives::Address,
     q: i128,
 }
 

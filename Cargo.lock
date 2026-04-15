@@ -3450,7 +3450,7 @@ dependencies = [
 
 [[package]]
 name = "ethgas_commit_boost_modules"
-version = "1.0.5"
+version = "1.0.6"
 dependencies = [
  "alloy",
  "axum 0.8.4",

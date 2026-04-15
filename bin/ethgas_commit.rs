@@ -95,6 +95,8 @@ struct ExtraConfig {
     obol_node_operator_owner_keystores: Option<Vec<KeystoreConfig>>,
     obol_node_operator_owner_ledger_paths: Option<Vec<String>>,
     obol_node_operator_owner_validator_pubkeys: Option<Vec<Vec<BlsPublicKey>>>,
+    ssv_node_operator_owner_payout_addresses: Option<Vec<alloy::primitives::Address>>,
+    obol_node_operator_owner_payout_addresses: Option<Vec<alloy::primitives::Address>>,
 }
 
 #[derive(Debug, TreeHash, Deserialize)]
@@ -103,15 +105,9 @@ struct RegisteredInfo {
     eoa_address: alloy::primitives::Address,
 }
 
-#[derive(Debug, TreeHash, Deserialize)]
-struct SigningData {
-    object_root: [u8; 32],
-    signing_domain: [u8; 32],
-}
-
 #[derive(Debug, Deserialize)]
 struct APILoginResponse {
-    success: bool,
+    // success: bool,
     data: APILoginResponseData,
 }
 
@@ -135,7 +131,7 @@ struct APILoginVerifyResponseData {
 
 #[derive(Debug, Deserialize)]
 struct APIUserUpdateResponse {
-    success: bool,
+    // success: bool,
     data: APIUserUpdateResponseData,
 }
 
@@ -157,7 +153,7 @@ struct AccessToken {
 
 #[derive(Debug, Deserialize)]
 struct APIValidatorRegisterResponse {
-    success: bool,
+    // success: bool,
     data: APIValidatorRegisterResponseData,
 }
 
@@ -188,7 +184,7 @@ struct APIValidatorVerifyBatchResponse {
 #[derive(Debug, Deserialize)]
 struct ValidatorVerifyResult {
     result: u8,
-    description: String,
+    // description: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -272,7 +268,7 @@ impl EthgasExchangeService {
             ),
         };
         let signer_address = signer.address();
-        info!("your EOA address: {}", signer_address);
+        info!("ETHGas EOA address: {}", signer_address);
         let mut exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/login"
@@ -449,16 +445,6 @@ impl EthgasCommitService {
             Err(err) => {
                 error!(?err, "failed to call validator collateral setting API");
             }
-        }
-
-        if let Some(payout_address) = self.config.extra.payout_address {
-            update_payout_address(
-                &client,
-                &self.config.extra.exchange_api_base,
-                &access_jwt,
-                payout_address,
-            )
-            .await?;
         }
 
         if self.config.extra.registration_mode == "ssv" {
@@ -684,6 +670,12 @@ impl EthgasCommitService {
                 return Err(std::io::Error::other("ssv_node_operator_owner_signing_keys & ssv_node_operator_owner_validator_pubkeys should have same array length").into());
             }
 
+            if let Some(ref payout_addresses) = self.config.extra.ssv_node_operator_owner_payout_addresses {
+                if ssv_node_operator_signers.len() != payout_addresses.len() {
+                    return Err(std::io::Error::other("ssv_node_operator_owner_payout_addresses should have same array length as ssv_node_operator_owner_signing_keys").into());
+                }
+            }
+
             for i in 0..ssv_node_operator_signers.len() {
                 let ssv_node_operator_owner_address: alloy::primitives::Address;
 
@@ -809,6 +801,10 @@ impl EthgasCommitService {
                     }
                 }
 
+                let ssv_payout_address = self.config.extra.ssv_node_operator_owner_payout_addresses
+                    .as_ref()
+                    .map(|addrs| addrs[i]);
+
                 if self.config.extra.enable_registration {
                     warn!("it may take up to 30 seconds to register all SSV validator pubkeys if there are many pubkeys");
                     exchange_api_url = Url::parse(&format!(
@@ -825,13 +821,11 @@ impl EthgasCommitService {
                             .send()
                             .await?;
 
-                        let pubkeys_str_list = String::new();
-
                         self.ssv_validator_register_response(
                             res,
                             &client,
                             &access_jwt,
-                            pubkeys_str_list,
+                            ssv_payout_address,
                         )
                         .await?;
                     } else {
@@ -856,7 +850,7 @@ impl EthgasCommitService {
                                 res,
                                 &client,
                                 &access_jwt,
-                                pubkeys_chunk_list,
+                                ssv_payout_address,
                             )
                             .await?;
                         }
@@ -914,6 +908,7 @@ impl EthgasCommitService {
                 &self.config.extra.obol_node_operator_owner_keystores,
                 &self.config.extra.obol_node_operator_owner_ledger_paths,
                 &self.config.extra.obol_node_operator_owner_validator_pubkeys,
+                &self.config.extra.obol_node_operator_owner_payout_addresses,
             )
             .await?;
         } else if self.config.extra.registration_mode == "standard"
@@ -1083,15 +1078,15 @@ impl EthgasCommitService {
                                                     } else {
                                                         info!("successful registration, you can now sell preconfs on ETHGas");
                                                     }
-                                                    info!(number = registered_keys.len(), registered_validators = ?registered_keys);
+                                                    info!(registered_validators = ?registered_keys, number = registered_keys.len());
                                                     newly_registered_key_num +=
                                                         registered_keys.len();
                                                 }
                                                 if !previously_registered_keys.is_empty() {
-                                                    warn!(number = previously_registered_keys.len(), previously_registered_validators = ?previously_registered_keys);
+                                                    warn!(previously_registered_validators = ?previously_registered_keys, number = previously_registered_keys.len());
                                                 }
                                                 if !keys_with_invalid_signature.is_empty() {
-                                                    error!(number = keys_with_invalid_signature.len(), invalid_signature = ?keys_with_invalid_signature);
+                                                    error!(invalid_signature = ?keys_with_invalid_signature, number = keys_with_invalid_signature.len());
                                                 }
 
                                                 update_ofac(
@@ -1100,9 +1095,21 @@ impl EthgasCommitService {
                                                     &self.config.extra.exchange_api_base,
                                                     &access_jwt,
                                                     self.config.extra.enable_ofac,
-                                                    pubkeys_str,
+                                                    &pubkeys_str,
                                                 )
                                                 .await?;
+
+                                                if let Some(payout_address) = self.config.extra.payout_address {
+                                                    update_payout_address(
+                                                        &client,
+                                                        &self.config.extra.registration_mode,
+                                                        &self.config.extra.exchange_api_base,
+                                                        &access_jwt,
+                                                        payout_address,
+                                                        &pubkeys_str,
+                                                    )
+                                                    .await?;
+                                                }
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
@@ -1144,7 +1151,7 @@ impl EthgasCommitService {
                                         Ok(res_json) => {
                                             if res_json.success {
                                                 info!("successful deregistration");
-                                                info!(number = res_json.data.deleted.len(), deregistered_validators = ?res_json.data.deleted);
+                                                info!(deregistered_validators = ?res_json.data.deleted, number = res_json.data.deleted.len());
                                                 deregistered_key_num += res_json.data.deleted.len();
                                             } else {
                                                 error!("failed to deregister");
@@ -1203,7 +1210,7 @@ impl EthgasCommitService {
         res: Response,
         client: &Client,
         access_jwt: &str,
-        pubkeys_str_list: String,
+        payout_address: Option<alloy::primitives::Address>,
     ) -> Result<()> {
         match res.json::<APISsvValidatorRegisterResponse>().await {
             Ok(result) => {
@@ -1219,7 +1226,12 @@ impl EthgasCommitService {
                                     info!("successful registration, you can now sell preconfs on ETHGas");
                                 }
                                 let result_data_validators = result.data.validators.unwrap_or_default();
-                                info!(number = result_data_validators.len(), registered_validators = ?result_data_validators);
+                                info!(registered_validators = ?result_data_validators, number = result_data_validators.len());
+                                let validators_str = result_data_validators
+                                    .iter()
+                                    .map(|v| v.to_string())
+                                    .collect::<Vec<_>>()
+                                    .join(",");
 
                                 update_ofac(
                                     client,
@@ -1227,8 +1239,19 @@ impl EthgasCommitService {
                                     &self.config.extra.exchange_api_base,
                                     access_jwt,
                                     self.config.extra.enable_ofac,
-                                    pubkeys_str_list,
+                                    &validators_str,
                                 ).await.map_err(|err| eyre::eyre!("failed to update OFAC status: {}", err))?;
+
+                                if let Some(payout_addr) = payout_address {
+                                    update_payout_address(
+                                        client,
+                                        &self.config.extra.registration_mode,
+                                        &self.config.extra.exchange_api_base,
+                                        access_jwt,
+                                        payout_addr,
+                                        &validators_str,
+                                    ).await.map_err(|err| eyre::eyre!("failed to update validator payout address: {}", err))?;
+                                }
                             }
                         }
                     },
@@ -1253,7 +1276,7 @@ impl EthgasCommitService {
                         warn!("no pubkey was deregistered. those pubkeys maybe deregistered already previously");
                     } else {
                         info!("successful deregistration");
-                        info!(number = result_data_removed.len(), deregistered_validators = ?result_data_removed);
+                        info!(deregistered_validators = ?result_data_removed, number = result_data_removed.len());
                     }
                 }
                 false => {
@@ -1295,6 +1318,7 @@ async fn main() -> Result<()> {
 
                 info!(
                     module_id = %config.id,
+                    version = env!("CARGO_PKG_VERSION"),
                     "Starting module with custom data"
                 );
                 info!("chain: {:?}", config.chain);

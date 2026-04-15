@@ -1,7 +1,7 @@
 use eyre::Result;
 use reqwest::{Client, Url};
 use serde::Deserialize;
-use std::error::Error;
+use std::{error::Error, collections::HashMap};
 use tracing::{error, info};
 use alloy::{
     hex::encode,
@@ -21,33 +21,56 @@ pub struct APIUpdatePayoutAddrResponse {
 
 pub async fn update_payout_address(
     client: &Client,
+    registration_mode: &str,
     exchange_api_base: &str,
     access_jwt: &str,
     payout_address: alloy::primitives::Address,
+    pubkeys_str: &str,
 ) -> Result<(), Box<dyn Error>> {
-    let api_endpoint: &str = "/api/v1/user/payoutAddress";
+    let api_endpoint = if registration_mode == "ssv" {
+        "/api/v1/user/ssv/operator/validator/update/validatorPayoutAddress"
+    } else if registration_mode == "obol" {
+        "/api/v1/user/obol/operator/validator/update/validatorPayoutAddress"
+    } else {
+        "/api/v1/validator/update/validatorPayoutAddress"
+    };
     let exchange_api_url = Url::parse(&format!("{}{}", exchange_api_base, api_endpoint))?;
+    let payout_address_str = payout_address.to_string();
 
-    let res = client
-        .post(exchange_api_url.to_string())
-        .header("Authorization", format!("Bearer {}", access_jwt))
-        .query(&[("payoutAddress", payout_address)])
-        .send()
-        .await?;
+    if pubkeys_str.is_empty() {
+        return Ok(());
+    }
 
-    match res.json::<APIUpdatePayoutAddrResponse>().await {
-        Ok(res_json) => {
-            if res_json.success {
-                info!("successfully updated payout address as {}", payout_address);
-            } else {
-                error!(
-                    "failed to update payout address: {}",
-                    res_json.error_msg_key.unwrap_or_default()
-                );
+    let pubkeys: Vec<&str> = pubkeys_str.split(',').collect();
+
+    for (_i, chunk) in pubkeys.chunks(100).enumerate() {
+        let chunk_str = chunk.join(",");
+        let mut form_data = HashMap::new();
+        form_data.insert("publicKeys".to_string(), chunk_str);
+        form_data.insert("validatorPayoutAddress".to_string(), payout_address_str.clone());
+
+        let res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", access_jwt))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .form(&form_data)
+            .send()
+            .await?;
+
+        match res.json::<APIUpdatePayoutAddrResponse>().await {
+            Ok(res_json) => {
+                if res_json.success {
+                    info!("successfully updated payout address to {} for the above registered validators", payout_address);
+                } else {
+                    error!(
+                        "failed to update payout address: {}",
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
+                }
             }
-        }
-        Err(err) => {
-            error!(?err, "Failed to call update payout address API");
+            Err(err) => {
+                error!(?err, "Failed to call update payout address API");
+            }
         }
     }
 
