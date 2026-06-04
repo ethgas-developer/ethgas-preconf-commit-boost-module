@@ -1,11 +1,11 @@
 [package]
 name = "ethgas_commit_boost_modules"
-version = "1.0.6"
-rust-version = "1.90.0"
-edition = "2021"
+version = "1.0.7"
+rust-version = "1.91"
+edition = "2024"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "a0e1b7c9e75c93e3d10c12a3ec24cffbc7c77b19" }
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "d6d2eed4f67b5ba1f97007abfe067883e35c7620" }
 
 # ethereum
 alloy = { version = "1.1.0", features = [
@@ -25,7 +25,7 @@ eth-keystore = { git = "https://github.com/p2p-org/eth-keystore-rs.git", version
 
 # networking
 axum = { version = "0.8.1", features = ["macros"] }
-reqwest = { version = "0.12.0", features = ["json", "stream"] }
+reqwest = { version = "0.13", features = ["json", "stream", "query", "form"] }
 
 # async / threads
 tokio = { version = "1.37.0", features = ["full"] }
@@ -34,7 +34,7 @@ tokio-retry = "0.3"
 # serialization
 serde = { version = "1.0.202", features = ["derive"] }
 serde_json = "1.0.117"
-ethereum_ssz_derive = "0.8"
+ethereum_ssz_derive = "0.10"
 
 # telemetry
 tracing = "0.1.40"
@@ -43,8 +43,8 @@ prometheus = "0.14.0"
 
 # crypto
 blst = "0.3.15"
-tree_hash = "0.9"
-tree_hash_derive = "0.9"
+tree_hash = "0.12"
+tree_hash_derive = "0.12"
 
 # misc
 js-sys = "0.3.72"

@@ -249,7 +249,7 @@ pub async fn register_obol_keys(
         return Err(std::io::Error::other("obol_node_operator_owner_signing_keys & obol_node_operator_owner_validator_pubkeys should have same array length").into());
     }
 
-    if let Some(ref payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
+    if let Some(payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
         if obol_node_operator_signers.len() != payout_addresses.len() {
             return Err(std::io::Error::other("obol_node_operator_owner_payout_addresses should have same array length as obol_node_operator_owner_signing_keys").into());
         }
@@ -429,7 +429,7 @@ pub async fn register_obol_keys(
                                         &validators_str,
                                     ).await?;
 
-                                    if let Some(ref payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
+                                    if let Some(payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
                                         update_payout_address(
                                             client,
                                             config_extra_registration_mode,

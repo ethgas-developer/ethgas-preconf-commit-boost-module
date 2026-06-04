@@ -33,7 +33,7 @@
     - You can generate a completely new EOA address to serve as the ETHGas Exchange account
     - For ledger login, find out more in [Ledger connection issue](#ledger-connection-issue)
   - set `enable_pricer = true` if you want to delegate to our default pricer to help you to sell preconfs
-  - set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
+  - set `enable_builder = true` and `builder_pubkey` if you want to delegate to a specific external builder to build the block. `builder_pubkey` can be omitted when `enable_builder = false`. Regardless of whether the builder delegation is enabled or not, our fallback builder will always build a backup block which can fulfill all the preconf commitments
   - set `enable_ofac = true` if your validators only accept ofac-compliant blocks. This is a pubkey-specific setting so you could specify list of pubkeys in `[[mux]].validator_pubkeys` or `ssv_node_operator_owner_validator_pubkeys`.
   - `collateral_per_slot` indicates how much ETH is allocated to secure a single slot. It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal place
   - `payout_address` is your actual fee recipient address for receiving payout if ETHGas collateral contract (EthgasPool) address is set as the fee recipient in your beacon node or validator client. More details can be found in [here](https://docs.ethgas.com/get-started/node-operators/multi-relay-support)

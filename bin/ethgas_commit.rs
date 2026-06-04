@@ -76,7 +76,7 @@ struct ExtraConfig {
     enable_ofac: bool,
     collateral_per_slot: String,
     payout_address: Option<alloy::primitives::Address>,
-    builder_pubkey: BlsPublicKey,
+    builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
     query_pubkey: bool,
     eoa_signing_key: Option<B256>,
@@ -341,6 +341,13 @@ impl EthgasExchangeService {
 
 impl EthgasCommitService {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        if self.config.extra.enable_builder && self.config.extra.builder_pubkey.is_none() {
+            return Err(std::io::Error::other(
+                "builder_pubkey is required when enable_builder = true",
+            )
+            .into());
+        }
+
         let client = Client::new();
 
         let mut exchange_api_url = Url::parse(&format!(
@@ -377,42 +384,46 @@ impl EthgasCommitService {
             }
         }
 
-        exchange_api_url = Url::parse(&format!(
-            "{}{}{}{}{}",
-            self.config.extra.exchange_api_base,
-            "/api/v1/user/delegate/builder?enable=",
-            self.config.extra.enable_builder,
-            "&publicKeys=",
-            self.config.extra.builder_pubkey
-        ))?;
-        res = client
-            .post(exchange_api_url.to_string())
-            .header("Authorization", format!("Bearer {}", self.access_jwt))
-            .header("content-type", "application/json")
-            .send()
-            .await?;
-        match res.json::<APIEnableBuilderResponse>().await {
-            Ok(result) => match result.success {
-                true => {
-                    if self.config.extra.enable_builder {
-                        info!(
-                            "successfully delegated to builder {}",
-                            self.config.extra.builder_pubkey
-                        );
-                    } else {
-                        info!("successfully disabled builder delegation");
+        match &self.config.extra.builder_pubkey {
+            Some(builder_pubkey) => {
+                exchange_api_url = Url::parse(&format!(
+                    "{}{}{}{}{}",
+                    self.config.extra.exchange_api_base,
+                    "/api/v1/user/delegate/builder?enable=",
+                    self.config.extra.enable_builder,
+                    "&publicKeys=",
+                    builder_pubkey
+                ))?;
+                res = client
+                    .post(exchange_api_url.to_string())
+                    .header("Authorization", format!("Bearer {}", self.access_jwt))
+                    .header("content-type", "application/json")
+                    .send()
+                    .await?;
+                match res.json::<APIEnableBuilderResponse>().await {
+                    Ok(result) => match result.success {
+                        true => {
+                            if self.config.extra.enable_builder {
+                                info!("successfully delegated to builder {}", builder_pubkey);
+                            } else {
+                                info!("successfully disabled builder delegation");
+                            }
+                        }
+                        false => {
+                            if self.config.extra.enable_builder {
+                                error!("failed to enable builder delegation");
+                            } else {
+                                error!("failed to disable builder delegation");
+                            }
+                        }
+                    },
+                    Err(err) => {
+                        error!(?err, "failed to call builder delegation API");
                     }
                 }
-                false => {
-                    if self.config.extra.enable_builder {
-                        error!("failed to enable builder delegation");
-                    } else {
-                        error!("failed to disable builder delegation");
-                    }
-                }
-            },
-            Err(err) => {
-                error!(?err, "failed to call builder delegation API");
+            }
+            None => {
+                info!("builder delegation is disabled and builder_pubkey is not set");
             }
         }
 
