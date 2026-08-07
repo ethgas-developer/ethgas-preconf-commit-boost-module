@@ -75,6 +75,7 @@ struct ExtraConfig {
     enable_builder: bool,
     enable_ofac: bool,
     collateral_per_slot: String,
+    validator_mode: u8,
     payout_address: Option<alloy::primitives::Address>,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
@@ -253,6 +254,17 @@ struct APIEnableBuilderResponse {
 #[derive(Debug, Deserialize)]
 struct APICollateralPerSlotResponse {
     success: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct APIValidatorModeResponse {
+    success: bool,
+    data: APIValidatorModeResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+struct APIValidatorModeResponseData {
+    mode: u8,
 }
 
 impl EthgasExchangeService {
@@ -455,6 +467,34 @@ impl EthgasCommitService {
             },
             Err(err) => {
                 error!(?err, "failed to call validator collateral setting API");
+            }
+        }
+
+        exchange_api_url = Url::parse(&format!(
+            "{}{}{}",
+            self.config.extra.exchange_api_base,
+            "/api/v1/validator/mode?mode=",
+            self.config.extra.validator_mode
+        ))?;
+        res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", access_jwt))
+            // .header("content-type", "application/json")
+            .send()
+            .await?;
+        match res.json::<APIValidatorModeResponse>().await {
+            Ok(result) => match result.success {
+                true => match result.data.mode {
+                    0 => info!("successfully set validator mode to max profit"),
+                    1 => info!("successfully set validator mode to light mode"),
+                    other => info!("successfully set validator mode to {}", other),
+                },
+                false => {
+                    error!("failed to set validator mode");
+                }
+            },
+            Err(err) => {
+                error!(?err, "failed to call validator mode API");
             }
         }
 

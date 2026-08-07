@@ -442,6 +442,11 @@ enable_ofac = false
 # REQUIRED
 collateral_per_slot = "0"
 
+# Validator mode.
+# 0 = max-profit, 1 = light mode
+# REQUIRED
+validator_mode = 0
+
 # Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
 # is set as the fee recipient in the beacon node or validator client
 # More details can be found in https://docs.ethgas.com/get-started/node-operators/multi-relay-support
