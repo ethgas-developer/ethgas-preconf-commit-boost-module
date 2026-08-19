@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, update_payout_address}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, update_payout_address, update_validator_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -75,7 +75,7 @@ struct ExtraConfig {
     enable_builder: bool,
     enable_ofac: bool,
     collateral_per_slot: String,
-    validator_mode: u8,
+    validator_mode: Option<u8>,
     payout_address: Option<alloy::primitives::Address>,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
@@ -254,17 +254,6 @@ struct APIEnableBuilderResponse {
 #[derive(Debug, Deserialize)]
 struct APICollateralPerSlotResponse {
     success: bool,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIValidatorModeResponse {
-    success: bool,
-    data: APIValidatorModeResponseData,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIValidatorModeResponseData {
-    mode: u8,
 }
 
 impl EthgasExchangeService {
@@ -470,33 +459,13 @@ impl EthgasCommitService {
             }
         }
 
-        exchange_api_url = Url::parse(&format!(
-            "{}{}{}",
-            self.config.extra.exchange_api_base,
-            "/api/v1/validator/mode?mode=",
-            self.config.extra.validator_mode
-        ))?;
-        res = client
-            .post(exchange_api_url.to_string())
-            .header("Authorization", format!("Bearer {}", access_jwt))
-            // .header("content-type", "application/json")
-            .send()
-            .await?;
-        match res.json::<APIValidatorModeResponse>().await {
-            Ok(result) => match result.success {
-                true => match result.data.mode {
-                    0 => info!("successfully set validator mode to max profit"),
-                    1 => info!("successfully set validator mode to light mode"),
-                    other => info!("successfully set validator mode to {}", other),
-                },
-                false => {
-                    error!("failed to set validator mode");
-                }
-            },
-            Err(err) => {
-                error!(?err, "failed to call validator mode API");
-            }
-        }
+        update_validator_mode(
+            &client,
+            &self.config.extra.exchange_api_base,
+            &access_jwt,
+            self.config.extra.validator_mode,
+        )
+        .await?;
 
         if self.config.extra.registration_mode == "ssv" {
             let ssv_node_operator_owner_validator_pubkeys =
@@ -1017,7 +986,7 @@ impl EthgasCommitService {
                                         .request_consensus_signature(request)
                                         .await?;
 
-                                    signatures.push(signature.to_string());
+                                    signatures.push(signature.signature.to_string());
                                 }
 
                                 let mut newly_registered_key_num = 0;
@@ -1374,7 +1343,7 @@ async fn main() -> Result<()> {
                 );
                 info!("chain: {:?}", config.chain);
 
-                let pbs_config = match load_pbs_config().await {
+                let pbs_config = match load_pbs_config(None).await {
                     Ok(config) => config,
                     Err(err) => {
                         error!("Failed to load pbs config: {err:?}");
@@ -1469,7 +1438,7 @@ async fn main() -> Result<()> {
                     };
                 }
 
-                let mux_pubkeys = match pbs_config.mux_lookup {
+                let mux_pubkeys = match pbs_config.0.mux_lookup {
                     Some(mux_map) => {
                         let mut seen = HashSet::new();
                         mux_map

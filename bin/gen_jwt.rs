@@ -23,12 +23,12 @@ fn main() {
     let mut jwts = IndexMap::new();
     let mut envs = IndexMap::new();
     let jwt = random_jwt();
-    let jwt_name = format!("CB_JWT_{}", module_id.to_uppercase());
+    let admin_jwt = random_jwt();
 
-    envs.insert(jwt_name.clone(), jwt.clone());
     jwts.insert(module_id.clone(), jwt.clone());
     envs.insert("CB_JWTS".to_string(), format_comma_separated(&jwts));
     envs.insert("CB_SIGNER_JWT".to_string(), jwt.clone());
+    envs.insert("CB_SIGNER_ADMIN_JWT".to_string(), admin_jwt.clone());
     let envs_str = {
         let mut envs_str = String::new();
         for (k, v) in envs {

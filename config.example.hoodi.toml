@@ -2,13 +2,16 @@
 # Some fields are optional and can be omitted, in which case the default value, if present, will be used.
 
 # Chain spec ID. Supported values:
-# A network ID. Supported values: Mainnet, Holesky, Sepolia, Helder, Hoodi. Lower case values e.g. "mainnet" are also accepted
+# A network ID. Supported values: Mainnet, Holesky, Sepolia, Hoodi. Lower case values e.g. "mainnet" are also accepted
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
 chain = "Hoodi" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module.
 [pbs]
+# Docker image to use for the PBS module.
+# OPTIONAL, DEFAULT: ghcr.io/commit-boost/commit-boost:latest
+# docker_image = "ghcr.io/commit-boost/commit-boost:latest"
 # Whether to enable the PBS module to request signatures from the Signer module (not used in the default PBS image)
 # OPTIONAL, DEFAULT: false
 with_signer = false
@@ -67,9 +70,13 @@ extra_validation_enabled = false
 # OPTIONAL
 # rpc_url = "rpc_url = "https://ethereum-hoodi-rpc.publicnode.com"
 
-# URL of the SSV API server to use, if you have a mux that targets an SSV node operator.
-# OPTIONAL, DEFAULT: "https://api.ssv.network/api/v4"
-# ssv_api_url = "https://api.ssv.network/api/v4"
+# URL of your local SSV node API endpoint, if you have a mux that targets an SSV node operator
+# OPTIONAL, DEFAULT: "http://localhost:16000/v1/"
+# ssv_node_api_url = "http://localhost:16000/v1/"
+# URL of the public SSV API server, if you have a mux that targets an SSV node operator. This is used as
+# a fallback if the user's own SSV node is not reachable.
+# OPTIONAL, DEFAULT: "https://api.ssv.network/api/v4/"
+# ssv_public_api_url = "https://api.ssv.network/api/v4/"
 
 # Timeout for any HTTP requests sent from the PBS module to other services, in seconds.
 # OPTIONAL, DEFAULT: 10
@@ -170,7 +177,7 @@ validator_registration_batch_size = ""
 #   - Lido: NodeOperatorsRegistry
 #   - SSV: SSV API
 # OPTIONAL
-# loader = "/tests/data/mux_keys.example.json"
+# loader = "/tests/data/mux_keys.json"
 
 # URL to HTTP endpoint returning JSON list of validator pubkeys.
 # Example response:
@@ -299,16 +306,18 @@ secrets_path = "/path/to/data_validator/secrets"
 # File: path to the keys file
 # proxy_dir = "./proxies"
 # # ERC2335: path to the keys directory
-# # keys_path = "./tests/data/proxy/keys"
+# keys_path = "./tests/data/proxy/keys"
 # # ERC2335: path to the secrets directory
-# # secrets_path = "./tests/data/proxy/secrets"
+# secrets_path = "./tests/data/proxy/secrets"
 
 # Commit-Boost can optionally run "modules" which extend the capabilities of the sidecar.
-# Currently, two types of modules are supported:
+# Currently, one type of modules is supported:
 #   - "commit": modules which request commitment signatures from the validator keys
 # If any "commit" module is present, then the [signer] section should also be configured
 [[modules]]
 id = "ETHGAS_COMMIT"
+# Unique hash that the Signer service will combine with the incoming data in signing requests to generate a signature specific to this module
+signing_id = "0x4554484741535f434f4d4d49545f5349474e494e475f49440000000000000000"
 type = "commit"
 env_file = ".cb.env"
 docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
@@ -357,11 +366,6 @@ enable_ofac = false
 # It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal places.
 # REQUIRED
 collateral_per_slot = "0"
-
-# Validator mode. 
-# 0 = max-profit, 1 = light mode
-# REQUIRED
-validator_mode = 0
 
 # Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
 # is set as the fee recipient in the beacon node or validator client
@@ -466,26 +470,27 @@ refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 # ]
 
 # required only if cb_ethgas_deposit is run
-[[modules]]
-id = "ETHGAS_DEPOSIT"
-type = "commit"
-env_file = ".cb.env"
-docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
+# [[modules]]
+# id = "ETHGAS_DEPOSIT"
+# signing_id = "0x4554484741535f4445504f5349545f5349474e494e475f494400000000000000"
+# type = "commit"
+# env_file = ".cb.env"
+# docker_image = "" # placeholder value, actual docker image is set in docker-compose.yml
 
-# REQUIRED
-block_confirmation = 12
+# # REQUIRED
+# block_confirmation = 12
 
-# REQUIRED
-exchange_api_base = "https://hoodi.app.ethgas.com"
+# # REQUIRED
+# exchange_api_base = "https://hoodi.app.ethgas.com"
 
-# REQUIRED
-collateral_to_be_deposited = "0.01"
+# # REQUIRED
+# collateral_to_be_deposited = "0.01"
 
-# REQUIRED
-collateral_contract = "0x104Ef4192a97E0A93aBe8893c8A2d2484DFCBAF1"
+# # REQUIRED
+# collateral_contract = "0x104Ef4192a97E0A93aBe8893c8A2d2484DFCBAF1"
 
-# OPTIONAL
-eoa_signing_key = "0x..."
+# # OPTIONAL
+# eoa_signing_key = "0x..."
 
 # Configuration for how metrics should be collected and scraped
 # OPTIONAL, skip metrics collection if missing

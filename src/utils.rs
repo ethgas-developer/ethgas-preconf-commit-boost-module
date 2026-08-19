@@ -19,6 +19,58 @@ pub struct APIUpdatePayoutAddrResponse {
     pub error_msg_key: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct APIValidatorModeResponse {
+    pub success: bool,
+    pub data: APIValidatorModeResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct APIValidatorModeResponseData {
+    pub mode: u8,
+}
+
+pub async fn update_validator_mode(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+    validator_mode: Option<u8>,
+) -> Result<(), Box<dyn Error>> {
+    let validator_mode = match validator_mode {
+        Some(validator_mode) => validator_mode,
+        None => {
+            return Ok(());
+        }
+    };
+
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}{}",
+        exchange_api_base, "/api/v1/validator/mode?mode=", validator_mode
+    ))?;
+    let res = client
+        .post(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+    match res.json::<APIValidatorModeResponse>().await {
+        Ok(result) => match result.success {
+            true => match result.data.mode {
+                0 => info!("successfully set validator mode to max profit"),
+                1 => info!("successfully set validator mode to light mode"),
+                other => info!("successfully set validator mode to {}", other),
+            },
+            false => {
+                error!("failed to set validator mode");
+            }
+        },
+        Err(err) => {
+            error!(?err, "failed to call validator mode API");
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn update_payout_address(
     client: &Client,
     registration_mode: &str,

@@ -481,7 +481,7 @@ async fn main() -> Result<()> {
             );
             info!("chain: {:?}", config.chain);
 
-            let pbs_config = match load_pbs_config().await {
+            let pbs_config = match load_pbs_config(None).await {
                 Ok(config) => config,
                 Err(err) => {
                     error!("Failed to load pbs config: {err:?}");
@@ -489,7 +489,7 @@ async fn main() -> Result<()> {
                 }
             };
 
-            let rpc_url = match Arc::try_unwrap(pbs_config.pbs_config) {
+            let rpc_url = match Arc::try_unwrap(pbs_config.0.pbs_config) {
                 Ok(pbs_config) => pbs_config.rpc_url.expect("Failed to get RPC URL"),
                 Err(_arc) => {
                     error!("Failed to get RPC URL");
