@@ -34,6 +34,7 @@ tokio-retry = "0.3"
 # serialization
 serde = { version = "1.0.202", features = ["derive"] }
 serde_json = "1.0.117"
+toml = "0.8"
 ethereum_ssz_derive = "0.10"
 
 # telemetry

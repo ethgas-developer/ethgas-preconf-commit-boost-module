@@ -3435,6 +3435,7 @@ dependencies = [
  "serde_json",
  "tokio",
  "tokio-retry",
+ "toml",
  "tracing",
  "tracing-subscriber",
  "tree_hash 0.12.1",

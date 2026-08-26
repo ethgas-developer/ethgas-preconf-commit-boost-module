@@ -55,6 +55,14 @@ enum EoaSignerConfig {
 
 struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
+    /// The module's `signing_id`, read back from the config file.
+    ///
+    /// As of commit-boost v0.10.0 `signing_id` is a native field of the module's
+    /// static config, so it can no longer be declared in [`ExtraConfig`] (serde's
+    /// `#[serde(flatten)]` gives the key to the static config first). Since
+    /// `StartCommitModuleConfig` does not re-expose it, we load it separately via
+    /// [`load_module_signing_id`] to keep a single source of truth.
+    signing_id: B256,
     access_jwt: String,
     refresh_jwt: String,
     mux_pubkeys: Vec<BlsPublicKey>,
@@ -1040,10 +1048,22 @@ impl EthgasCommitService {
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str.clone());
                                     form_data.insert("signatures", signatures_str);
+                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));
+                                    let chain_id = if self.config.extra.exchange_api_base.contains("hoodi") {
+                                        "560048"
+                                    } else if self.config.extra.exchange_api_base.contains("mainnet") {
+                                        "1"
+                                    } else {
+                                        return Err(std::io::Error::other(
+                                            "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
+                                        )
+                                        .into());
+                                    };
+                                    form_data.insert("chainId", chain_id.to_string());
                                     exchange_api_url = Url::parse(&format!(
                                         "{}{}",
                                         self.config.extra.exchange_api_base,
-                                        "/api/v1/validator/verify/batch"
+                                        "/api/v1/validator/verify/batch2"
                                     ))?;
                                     res = client
                                         .post(exchange_api_url.to_string())
@@ -1052,7 +1072,7 @@ impl EthgasCommitService {
                                         .form(&form_data)
                                         .send()
                                         .await?;
-
+                                    // println!("API Response as raw data: {}", res.text().await?);
                                     match res.json::<APIValidatorVerifyBatchResponse>().await {
                                         Ok(res_json_verify) => {
                                             let registered_keys: Vec<BlsPublicKey> =
@@ -1314,6 +1334,41 @@ impl EthgasCommitService {
     }
 }
 
+/// Load the module's `signing_id` directly from the commit-boost config file.
+///
+/// As of commit-boost v0.10.0, `signing_id` is a native field of the module's
+/// static config. `load_commit_module_config` consumes it (via `#[serde(flatten)]`)
+/// but does not re-expose it on `StartCommitModuleConfig`, and it can no longer be
+/// declared in `ExtraConfig` without breaking module deserialization. We therefore
+/// read it back out of the same config file (found via the same `CB_CONFIG` /
+/// `CB_MODULE_ID` env vars commit-boost uses) so it stays a single source of truth
+/// and always matches the value the signer applies.
+fn load_module_signing_id() -> Result<B256> {
+    let config_path = env::var("CB_CONFIG").unwrap_or_else(|_| "/cb-config.toml".to_string());
+    let module_id =
+        env::var("CB_MODULE_ID").map_err(|_| eyre::eyre!("CB_MODULE_ID env var not set"))?;
+
+    #[derive(Deserialize)]
+    struct ModuleSigningId {
+        id: String,
+        signing_id: B256,
+    }
+    #[derive(Deserialize)]
+    struct ConfigSigningIds {
+        modules: Vec<ModuleSigningId>,
+    }
+
+    let contents = std::fs::read_to_string(&config_path)
+        .map_err(|e| eyre::eyre!("failed to read config file {config_path}: {e}"))?;
+    let parsed: ConfigSigningIds = toml::from_str(&contents)?;
+    parsed
+        .modules
+        .into_iter()
+        .find(|m| m.id == module_id)
+        .map(|m| m.signing_id)
+        .ok_or_else(|| eyre::eyre!("no module with id {module_id} found in {config_path}"))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -1459,8 +1514,10 @@ async fn main() -> Result<()> {
                 };
 
                 if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
+                    let signing_id = load_module_signing_id()?;
                     let mut commit_service = EthgasCommitService {
                         config,
+                        signing_id,
                         access_jwt,
                         refresh_jwt,
                         mux_pubkeys,
