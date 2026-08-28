@@ -3213,7 +3213,7 @@ dependencies = [
 [[package]]
 name = "eth-keystore"
 version = "0.6.0"
-source = "git+https://github.com/p2p-org/eth-keystore-rs.git#80dc23f7cc325654a0f4d711097423e1127e8cc8"
+source = "git+https://github.com/ethgas-developer/p2p-org-eth-keystore-rs.git#80dc23f7cc325654a0f4d711097423e1127e8cc8"
 dependencies = [
  "aes",
  "blst",
