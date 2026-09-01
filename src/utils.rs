@@ -30,6 +30,35 @@ pub struct APIValidatorModeResponseData {
     pub mode: u8,
 }
 
+pub async fn read_validator_mode(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+) -> Result<u8, Box<dyn Error>> {
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base, "/api/v1/validator/mode"
+    ))?;
+    let res = client
+        .get(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+    let result = res.json::<APIValidatorModeResponse>().await?;
+
+    if !result.success {
+        return Err(std::io::Error::other("failed to read validator mode").into());
+    }
+
+    match result.data.mode {
+        0 => info!("current validator mode: max profit"),
+        1 => info!("current validator mode: light mode"),
+        other => info!("current validator mode: {}", other),
+    }
+
+    Ok(result.data.mode)
+}
+
 pub async fn update_validator_mode(
     client: &Client,
     exchange_api_base: &str,

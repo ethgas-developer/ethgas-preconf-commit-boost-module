@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, update_payout_address, update_validator_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, read_validator_mode, update_payout_address, update_validator_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -466,6 +466,13 @@ impl EthgasCommitService {
                 error!(?err, "failed to call validator collateral setting API");
             }
         }
+
+        read_validator_mode(
+            &client,
+            &self.config.extra.exchange_api_base,
+            &access_jwt,
+        )
+        .await?;
 
         update_validator_mode(
             &client,
