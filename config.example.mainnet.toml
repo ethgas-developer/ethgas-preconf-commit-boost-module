@@ -458,7 +458,7 @@ collateral_per_slot = "0"
 # If `[[mux]]` is enabled, only the payout addresses of the validator keys specified in `[[mux]].validator_pubkeys` will be updated; 
 # other validator keys will retain their existing payout address
 # For ssv or obol validators, please check the config in the section below
-# OPTIONAL
+# REQUIRED
 payout_address = "0x..."
 
 # A builder pubkey is required when enable_builder is true.

@@ -84,7 +84,7 @@ struct ExtraConfig {
     enable_ofac: bool,
     collateral_per_slot: String,
     validator_mode: Option<u8>,
-    payout_address: Option<alloy::primitives::Address>,
+    payout_address: alloy::primitives::Address,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
     query_pubkey: bool,
@@ -1146,17 +1146,15 @@ impl EthgasCommitService {
                                                 )
                                                 .await?;
 
-                                                if let Some(payout_address) = self.config.extra.payout_address {
-                                                    update_payout_address(
-                                                        &client,
-                                                        &self.config.extra.registration_mode,
-                                                        &self.config.extra.exchange_api_base,
-                                                        &access_jwt,
-                                                        payout_address,
-                                                        &pubkeys_str,
-                                                    )
-                                                    .await?;
-                                                }
+                                                update_payout_address(
+                                                    &client,
+                                                    &self.config.extra.registration_mode,
+                                                    &self.config.extra.exchange_api_base,
+                                                    &access_jwt,
+                                                    self.config.extra.payout_address,
+                                                    &pubkeys_str,
+                                                )
+                                                .await?;
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
