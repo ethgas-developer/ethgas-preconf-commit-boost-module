@@ -65,6 +65,7 @@ struct EthgasCommitService {
     signing_id: B256,
     access_jwt: String,
     refresh_jwt: String,
+    signer_address: Option<alloy::primitives::Address>,
     mux_pubkeys: Vec<BlsPublicKey>,
 }
 
@@ -265,7 +266,7 @@ struct APICollateralPerSlotResponse {
 }
 
 impl EthgasExchangeService {
-    pub async fn login(self) -> Result<(String, String)> {
+    pub async fn login(self) -> Result<(String, String, alloy::primitives::Address)> {
         let client = Client::new();
         let signer = match &self.eoa_signer_config {
             EoaSignerConfig::PrivateKey(signing_key) => EoaSigner::PrivateKey(
@@ -341,7 +342,7 @@ impl EthgasExchangeService {
             }
             Err(e) => warn!("failed to set the user name: {e}"),
         }
-        Ok((res_json_verify.data.access_token.token, refresh_jwt))
+        Ok((res_json_verify.data.access_token.token, refresh_jwt, signer_address))
         // println!("API status: {}", res.status());
         // println!("API Response as raw data: {}", res.text().await?);
         // Ok((String::from("test"), String::from("test")))
@@ -432,7 +433,7 @@ impl EthgasCommitService {
                 }
             }
             None => {
-                info!("builder delegation is disabled and builder_pubkey is not set");
+                info!("builder delegation call is skipped");
             }
         }
 
@@ -744,10 +745,10 @@ impl EthgasCommitService {
                                 if result.error_msg_key.clone().unwrap_or_default() == "error.ssv.operator.registered" {
                                     warn!("ssv node operator owner address has been registered");
                                 } else {
-                                    error!(
+                                    return Err(eyre::eyre!(
                                         "failed to register ssv node operator owner address: {}",
                                         result.error_msg_key.unwrap_or_default()
-                                    );
+                                    ).into());
                                 }
                             }
                         },
@@ -823,10 +824,10 @@ impl EthgasCommitService {
                                         info!("successfully registered ssv node operator owner address");
                                     }
                                     false => {
-                                        error!(
-                                        "failed to register ssv node operator owner address: {}",
-                                        result.error_msg_key.unwrap_or_default()
-                                    );
+                                        return Err(eyre::eyre!(
+                                            "failed to register ssv node operator owner address: {}",
+                                            result.error_msg_key.unwrap_or_default()
+                                        ).into());
                                     }
                                 }
                             Err(err) => {
@@ -982,6 +983,16 @@ impl EthgasCommitService {
                 Ok(res_json) => {
                     match res_json.data.message {
                         Some(api_validator_request_response_data_message) => {
+                            if let Some(signer_address) = self.signer_address {
+                                if api_validator_request_response_data_message.eoa_address != signer_address {
+                                    return Err(eyre::eyre!(
+                                        "validator registration EOA address {} does not match signer address {}",
+                                        api_validator_request_response_data_message.eoa_address,
+                                        signer_address
+                                    )
+                                    .into());
+                                }
+                            }
                             let mut signatures = Vec::new();
                             if self.config.extra.enable_registration {
                                 if !pubkeys.is_empty() {
@@ -1424,6 +1435,7 @@ async fn main() -> Result<()> {
 
                 let access_jwt: String;
                 let refresh_jwt: String;
+                let signer_address: Option<alloy::primitives::Address>;
                 if !config.extra.is_jwt_provided {
                     let eoa_signer_config = match (
                         config.extra.eoa_signing_key,
@@ -1462,7 +1474,7 @@ async fn main() -> Result<()> {
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signer_config,
                     };
-                    (access_jwt, refresh_jwt) =
+                    let (access_jwt_result, refresh_jwt_result, login_signer_address) =
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
                             let service = EthgasExchangeService {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
@@ -1475,6 +1487,9 @@ async fn main() -> Result<()> {
                             })
                         })
                         .await?;
+                    access_jwt = access_jwt_result;
+                    refresh_jwt = refresh_jwt_result;
+                    signer_address = Some(login_signer_address);
                 } else {
                     access_jwt = match config.extra.access_jwt.clone() {
                         Some(jwt) => jwt,
@@ -1496,6 +1511,7 @@ async fn main() -> Result<()> {
                             }
                         },
                     };
+                    signer_address = None;
                 }
 
                 let mux_pubkeys = match pbs_config.0.mux_lookup {
@@ -1525,6 +1541,7 @@ async fn main() -> Result<()> {
                         signing_id,
                         access_jwt,
                         refresh_jwt,
+                        signer_address,
                         mux_pubkeys,
                     };
                     if let Err(err) = commit_service.run().await {

@@ -58,10 +58,11 @@ pub async fn update_ofac(
                         info!("successfully disabled ofac for the above registered validators");
                     }
                 } else if enable_ofac {
-                    error!(
+                    return Err(eyre::eyre!(
                         "failed to enable ofac: {}",
                         res_json.error_msg_key.unwrap_or_default()
-                    );
+                    )
+                    .into());
                 } else {
                     error!(
                         "failed to disable ofac: {}",
@@ -70,7 +71,7 @@ pub async fn update_ofac(
                 }
             }
             Err(err) => {
-                error!(?err, "Failed to call update ofac API");
+                return Err(eyre::eyre!("Failed to call update ofac API: {err}").into());
             }
         }
     }
