@@ -2,7 +2,7 @@ use crate::{
     login_types::EoaSigner,
     dvt_types::KeystoreConfig,
     ofac::update_ofac,
-    utils::{generate_eip712_signature_for_dvt, update_payout_address}
+    utils::{enable_light_mode, generate_eip712_signature_for_dvt, update_payout_address}
 };
 use alloy::{
     primitives::B256,
@@ -79,6 +79,7 @@ pub async fn register_obol_keys(
     config_extra_registration_mode: &str,
     config_extra_enable_pricer: bool,
     config_extra_enable_ofac: bool,
+    config_extra_enable_light_mode: Option<bool>,
     config_extra_obol_node_operator_owner_mode: &Option<String>,
     config_extra_obol_node_operator_owner_signing_keys: &Option<Vec<B256>>,
     config_extra_obol_node_operator_owner_keystores: &Option<Vec<KeystoreConfig>>,
@@ -428,6 +429,16 @@ pub async fn register_obol_keys(
                                         config_extra_enable_ofac,
                                         &validators_str,
                                     ).await?;
+
+                                    if config_extra_enable_light_mode == Some(true) {
+                                        enable_light_mode(
+                                            client,
+                                            config_extra_registration_mode,
+                                            config_extra_exchange_api_base,
+                                            access_jwt,
+                                            &validators_str,
+                                        ).await?;
+                                    }
 
                                     if let Some(payout_addresses) = config_extra_obol_node_operator_owner_payout_addresses {
                                         update_payout_address(

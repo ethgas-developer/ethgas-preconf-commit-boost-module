@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, read_validator_mode, update_payout_address, update_validator_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, read_validator_mode, update_payout_address, update_validator_mode, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -83,6 +83,8 @@ struct ExtraConfig {
     enable_registration: bool,
     enable_builder: bool,
     enable_ofac: bool,
+    enable_light_mode: Option<bool>,
+    enable_user_lock: Option<bool>,
     collateral_per_slot: String,
     validator_mode: Option<u8>,
     payout_address: alloy::primitives::Address,
@@ -140,20 +142,10 @@ struct APILoginVerifyResponseData {
 }
 
 #[derive(Debug, Deserialize)]
-struct APIUserUpdateResponse {
-    // success: bool,
-    data: APIUserUpdateResponseData,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIUserUpdateResponseData {
-    user: APIUserUpdateResponseDataUser,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct APIUserUpdateResponseDataUser {
-    display_name: String,
+struct APIUserUpdateResponse {
+    success: bool,
+    error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -336,16 +328,19 @@ impl EthgasExchangeService {
             .await?;
         match res.json::<APIUserUpdateResponse>().await {
             Ok(res_json) => {
-                if res_json.data.user.display_name != self.entity_name.clone() {
-                    warn!("failed to set the user name")
+                if !res_json.success {
+                    error!(
+                        "failed to set the user name: {}", 
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
                 }
             }
-            Err(e) => warn!("failed to set the user name: {e}"),
+            Err(e) => error!("failed to set the user name: {e}"),
         }
         Ok((res_json_verify.data.access_token.token, refresh_jwt, signer_address))
         // println!("API status: {}", res.status());
         // println!("API Response as raw data: {}", res.text().await?);
-        // Ok((String::from("test"), String::from("test")))
+        // Ok((String::from("test"), String::from("test"), signer_address))
     }
 }
 
@@ -468,20 +463,20 @@ impl EthgasCommitService {
             }
         }
 
-        read_validator_mode(
-            &client,
-            &self.config.extra.exchange_api_base,
-            &access_jwt,
-        )
-        .await?;
+        // read_validator_mode(
+        //     &client,
+        //     &self.config.extra.exchange_api_base,
+        //     &access_jwt,
+        // )
+        // .await?;
 
-        update_validator_mode(
-            &client,
-            &self.config.extra.exchange_api_base,
-            &access_jwt,
-            self.config.extra.validator_mode,
-        )
-        .await?;
+        // update_validator_mode(
+        //     &client,
+        //     &self.config.extra.exchange_api_base,
+        //     &access_jwt,
+        //     self.config.extra.validator_mode,
+        // )
+        // .await?;
 
         if self.config.extra.registration_mode == "ssv" {
             let ssv_node_operator_owner_validator_pubkeys =
@@ -939,6 +934,7 @@ impl EthgasCommitService {
                 &self.config.extra.registration_mode,
                 self.config.extra.enable_pricer,
                 self.config.extra.enable_ofac,
+                self.config.extra.enable_light_mode,
                 &self.config.extra.obol_node_operator_owner_mode,
                 &self.config.extra.obol_node_operator_owner_signing_keys,
                 &self.config.extra.obol_node_operator_owner_keystores,
@@ -1157,6 +1153,17 @@ impl EthgasCommitService {
                                                 )
                                                 .await?;
 
+                                                if self.config.extra.enable_light_mode == Some(true) {
+                                                    enable_light_mode(
+                                                        &client,
+                                                        &self.config.extra.registration_mode,
+                                                        &self.config.extra.exchange_api_base,
+                                                        &access_jwt,
+                                                        &pubkeys_str,
+                                                    )
+                                                    .await?;
+                                                }
+
                                                 update_payout_address(
                                                     &client,
                                                     &self.config.extra.registration_mode,
@@ -1234,6 +1241,15 @@ impl EthgasCommitService {
             error!("invalid registration mode");
         }
 
+        if self.config.extra.enable_user_lock == Some(true) {
+            lock_user_account(
+                &client,
+                &self.config.extra.exchange_api_base,
+                &access_jwt,
+            )
+            .await?;
+        }
+
         if self.config.extra.query_pubkey {
             info!("querying all your registered pubkeys...");
             get_registered_all_pubkeys(
@@ -1297,6 +1313,16 @@ impl EthgasCommitService {
                                     self.config.extra.enable_ofac,
                                     &validators_str,
                                 ).await.map_err(|err| eyre::eyre!("failed to update OFAC status: {}", err))?;
+
+                                if self.config.extra.enable_light_mode == Some(true) {
+                                    enable_light_mode(
+                                        client,
+                                        &self.config.extra.registration_mode,
+                                        &self.config.extra.exchange_api_base,
+                                        access_jwt,
+                                        &validators_str,
+                                    ).await.map_err(|err| eyre::eyre!("failed to enable light mode: {}", err))?;
+                                }
 
                                 if let Some(payout_addr) = payout_address {
                                     update_payout_address(
