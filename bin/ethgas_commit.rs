@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, read_validator_mode, update_payout_address, update_validator_mode, enable_light_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -86,7 +86,7 @@ struct ExtraConfig {
     enable_light_mode: Option<bool>,
     enable_user_lock: Option<bool>,
     collateral_per_slot: String,
-    validator_mode: Option<u8>,
+    // validator_mode: Option<u8>,
     payout_address: alloy::primitives::Address,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
