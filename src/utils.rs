@@ -19,6 +19,183 @@ pub struct APIUpdatePayoutAddrResponse {
     pub error_msg_key: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct APIEnableLightModeResponse {
+    pub success: bool,
+    pub error_msg_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct APIValidatorModeResponse {
+    pub success: bool,
+    pub data: APIValidatorModeResponseData,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct APIValidatorModeResponseData {
+    pub mode: u8,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct APILockUserResponse {
+    pub success: bool,
+    pub error_msg_key: Option<String>,
+}
+
+pub async fn lock_user_account(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+) -> Result<(), Box<dyn Error>> {
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base, "/api/v1/user/lock"
+    ))?;
+    let res = client
+        .post(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+    let result = res.json::<APILockUserResponse>().await?;
+
+    if !result.success {
+        return Err(eyre::eyre!(
+            "failed to lock user account: {}",
+            result.error_msg_key.unwrap_or_default()
+        )
+        .into());
+    }
+
+    info!("successfully locked user account");
+    Ok(())
+}
+
+pub async fn read_validator_mode(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+) -> Result<u8, Box<dyn Error>> {
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base, "/api/v1/validator/mode"
+    ))?;
+    let res = client
+        .get(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+    let result = res.json::<APIValidatorModeResponse>().await?;
+
+    if !result.success {
+        return Err(std::io::Error::other("failed to read validator mode").into());
+    }
+
+    match result.data.mode {
+        0 => info!("current validator mode: max profit"),
+        1 => info!("current validator mode: light mode"),
+        other => info!("current validator mode: {}", other),
+    }
+
+    Ok(result.data.mode)
+}
+
+pub async fn update_validator_mode(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+    validator_mode: Option<u8>,
+) -> Result<(), Box<dyn Error>> {
+    let validator_mode = match validator_mode {
+        Some(validator_mode) => validator_mode,
+        None => {
+            return Ok(());
+        }
+    };
+
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}{}",
+        exchange_api_base, "/api/v1/validator/mode?mode=", validator_mode
+    ))?;
+    let res = client
+        .post(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await?;
+    match res.json::<APIValidatorModeResponse>().await {
+        Ok(result) => match result.success {
+            true => match result.data.mode {
+                0 => info!("successfully set validator mode to max profit"),
+                1 => info!("successfully set validator mode to light mode"),
+                other => info!("successfully set validator mode to {}", other),
+            },
+            false => {
+                error!("failed to set validator mode");
+            }
+        },
+        Err(err) => {
+            error!(?err, "failed to call validator mode API");
+        }
+    }
+
+    Ok(())
+}
+
+pub async fn enable_light_mode(
+    client: &Client,
+    registration_mode: &str,
+    exchange_api_base: &str,
+    access_jwt: &str,
+    pubkeys_str: &str,
+) -> Result<(), Box<dyn Error>> {
+    let api_endpoint = if registration_mode == "ssv" {
+        "/api/v1/ssv/validator/mode/enable"
+    } else if registration_mode == "obol" {
+        "/api/v1/obol/validator/mode/enable"
+    } else {
+        "/api/v1/validator/mode/enable"
+    };
+    let exchange_api_url = Url::parse(&format!("{}{}", exchange_api_base, api_endpoint))?;
+
+    if pubkeys_str.is_empty() {
+        return Ok(());
+    }
+
+    let pubkeys: Vec<&str> = pubkeys_str.split(',').collect();
+
+    for chunk in pubkeys.chunks(100) {
+        let mut form_data = HashMap::new();
+        form_data.insert("publicKeys".to_string(), chunk.join(","));
+
+        let res = client
+            .post(exchange_api_url.to_string())
+            .header("Authorization", format!("Bearer {}", access_jwt))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .form(&form_data)
+            .send()
+            .await?;
+
+        match res.json::<APIEnableLightModeResponse>().await {
+            Ok(res_json) => {
+                if res_json.success {
+                    info!("successfully enabled light mode for the above registered validators");
+                } else {
+                    error!(
+                        "failed to enable light mode: {}",
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
+                }
+            }
+            Err(err) => {
+                error!(?err, "failed to parse enable light mode API response");
+            }
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn update_payout_address(
     client: &Client,
     registration_mode: &str,

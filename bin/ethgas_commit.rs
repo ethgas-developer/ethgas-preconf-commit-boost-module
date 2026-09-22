@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, update_payout_address}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -55,8 +55,17 @@ enum EoaSignerConfig {
 
 struct EthgasCommitService {
     config: StartCommitModuleConfig<ExtraConfig>,
+    /// The module's `signing_id`, read back from the config file.
+    ///
+    /// As of commit-boost v0.10.0 `signing_id` is a native field of the module's
+    /// static config, so it can no longer be declared in [`ExtraConfig`] (serde's
+    /// `#[serde(flatten)]` gives the key to the static config first). Since
+    /// `StartCommitModuleConfig` does not re-expose it, we load it separately via
+    /// [`load_module_signing_id`] to keep a single source of truth.
+    signing_id: B256,
     access_jwt: String,
     refresh_jwt: String,
+    signer_address: Option<alloy::primitives::Address>,
     mux_pubkeys: Vec<BlsPublicKey>,
 }
 
@@ -74,8 +83,11 @@ struct ExtraConfig {
     enable_registration: bool,
     enable_builder: bool,
     enable_ofac: bool,
+    enable_light_mode: Option<bool>,
+    enable_user_lock: Option<bool>,
     collateral_per_slot: String,
-    payout_address: Option<alloy::primitives::Address>,
+    // validator_mode: Option<u8>,
+    payout_address: alloy::primitives::Address,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
     query_pubkey: bool,
@@ -130,20 +142,10 @@ struct APILoginVerifyResponseData {
 }
 
 #[derive(Debug, Deserialize)]
-struct APIUserUpdateResponse {
-    // success: bool,
-    data: APIUserUpdateResponseData,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIUserUpdateResponseData {
-    user: APIUserUpdateResponseDataUser,
-}
-
-#[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct APIUserUpdateResponseDataUser {
-    display_name: String,
+struct APIUserUpdateResponse {
+    success: bool,
+    error_msg_key: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -256,7 +258,7 @@ struct APICollateralPerSlotResponse {
 }
 
 impl EthgasExchangeService {
-    pub async fn login(self) -> Result<(String, String)> {
+    pub async fn login(self) -> Result<(String, String, alloy::primitives::Address)> {
         let client = Client::new();
         let signer = match &self.eoa_signer_config {
             EoaSignerConfig::PrivateKey(signing_key) => EoaSigner::PrivateKey(
@@ -326,16 +328,19 @@ impl EthgasExchangeService {
             .await?;
         match res.json::<APIUserUpdateResponse>().await {
             Ok(res_json) => {
-                if res_json.data.user.display_name != self.entity_name.clone() {
-                    warn!("failed to set the user name")
+                if !res_json.success {
+                    error!(
+                        "failed to set the user name: {}", 
+                        res_json.error_msg_key.unwrap_or_default()
+                    );
                 }
             }
-            Err(e) => warn!("failed to set the user name: {e}"),
+            Err(e) => error!("failed to set the user name: {e}"),
         }
-        Ok((res_json_verify.data.access_token.token, refresh_jwt))
+        Ok((res_json_verify.data.access_token.token, refresh_jwt, signer_address))
         // println!("API status: {}", res.status());
         // println!("API Response as raw data: {}", res.text().await?);
-        // Ok((String::from("test"), String::from("test")))
+        // Ok((String::from("test"), String::from("test"), signer_address))
     }
 }
 
@@ -423,7 +428,7 @@ impl EthgasCommitService {
                 }
             }
             None => {
-                info!("builder delegation is disabled and builder_pubkey is not set");
+                info!("builder delegation call is skipped");
             }
         }
 
@@ -457,6 +462,21 @@ impl EthgasCommitService {
                 error!(?err, "failed to call validator collateral setting API");
             }
         }
+
+        // read_validator_mode(
+        //     &client,
+        //     &self.config.extra.exchange_api_base,
+        //     &access_jwt,
+        // )
+        // .await?;
+
+        // update_validator_mode(
+        //     &client,
+        //     &self.config.extra.exchange_api_base,
+        //     &access_jwt,
+        //     self.config.extra.validator_mode,
+        // )
+        // .await?;
 
         if self.config.extra.registration_mode == "ssv" {
             let ssv_node_operator_owner_validator_pubkeys =
@@ -720,10 +740,10 @@ impl EthgasCommitService {
                                 if result.error_msg_key.clone().unwrap_or_default() == "error.ssv.operator.registered" {
                                     warn!("ssv node operator owner address has been registered");
                                 } else {
-                                    error!(
+                                    return Err(eyre::eyre!(
                                         "failed to register ssv node operator owner address: {}",
                                         result.error_msg_key.unwrap_or_default()
-                                    );
+                                    ).into());
                                 }
                             }
                         },
@@ -799,10 +819,10 @@ impl EthgasCommitService {
                                         info!("successfully registered ssv node operator owner address");
                                     }
                                     false => {
-                                        error!(
-                                        "failed to register ssv node operator owner address: {}",
-                                        result.error_msg_key.unwrap_or_default()
-                                    );
+                                        return Err(eyre::eyre!(
+                                            "failed to register ssv node operator owner address: {}",
+                                            result.error_msg_key.unwrap_or_default()
+                                        ).into());
                                     }
                                 }
                             Err(err) => {
@@ -914,6 +934,7 @@ impl EthgasCommitService {
                 &self.config.extra.registration_mode,
                 self.config.extra.enable_pricer,
                 self.config.extra.enable_ofac,
+                self.config.extra.enable_light_mode,
                 &self.config.extra.obol_node_operator_owner_mode,
                 &self.config.extra.obol_node_operator_owner_signing_keys,
                 &self.config.extra.obol_node_operator_owner_keystores,
@@ -958,6 +979,16 @@ impl EthgasCommitService {
                 Ok(res_json) => {
                     match res_json.data.message {
                         Some(api_validator_request_response_data_message) => {
+                            if let Some(signer_address) = self.signer_address {
+                                if api_validator_request_response_data_message.eoa_address != signer_address {
+                                    return Err(eyre::eyre!(
+                                        "validator registration EOA address {} does not match signer address {}",
+                                        api_validator_request_response_data_message.eoa_address,
+                                        signer_address
+                                    )
+                                    .into());
+                                }
+                            }
                             let mut signatures = Vec::new();
                             if self.config.extra.enable_registration {
                                 if !pubkeys.is_empty() {
@@ -977,7 +1008,7 @@ impl EthgasCommitService {
                                         .request_consensus_signature(request)
                                         .await?;
 
-                                    signatures.push(signature.to_string());
+                                    signatures.push(signature.signature.to_string());
                                 }
 
                                 let mut newly_registered_key_num = 0;
@@ -1031,10 +1062,22 @@ impl EthgasCommitService {
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str.clone());
                                     form_data.insert("signatures", signatures_str);
+                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));
+                                    let chain_id = if self.config.extra.exchange_api_base.contains("hoodi") {
+                                        "560048"
+                                    } else if self.config.extra.exchange_api_base.contains("mainnet") {
+                                        "1"
+                                    } else {
+                                        return Err(std::io::Error::other(
+                                            "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
+                                        )
+                                        .into());
+                                    };
+                                    form_data.insert("chainId", chain_id.to_string());
                                     exchange_api_url = Url::parse(&format!(
                                         "{}{}",
                                         self.config.extra.exchange_api_base,
-                                        "/api/v1/validator/verify/batch"
+                                        "/api/v1/validator/verify/batch2"
                                     ))?;
                                     res = client
                                         .post(exchange_api_url.to_string())
@@ -1043,7 +1086,7 @@ impl EthgasCommitService {
                                         .form(&form_data)
                                         .send()
                                         .await?;
-
+                                    // println!("API Response as raw data: {}", res.text().await?);
                                     match res.json::<APIValidatorVerifyBatchResponse>().await {
                                         Ok(res_json_verify) => {
                                             let registered_keys: Vec<BlsPublicKey> =
@@ -1110,17 +1153,26 @@ impl EthgasCommitService {
                                                 )
                                                 .await?;
 
-                                                if let Some(payout_address) = self.config.extra.payout_address {
-                                                    update_payout_address(
+                                                if self.config.extra.enable_light_mode == Some(true) {
+                                                    enable_light_mode(
                                                         &client,
                                                         &self.config.extra.registration_mode,
                                                         &self.config.extra.exchange_api_base,
                                                         &access_jwt,
-                                                        payout_address,
                                                         &pubkeys_str,
                                                     )
                                                     .await?;
                                                 }
+
+                                                update_payout_address(
+                                                    &client,
+                                                    &self.config.extra.registration_mode,
+                                                    &self.config.extra.exchange_api_base,
+                                                    &access_jwt,
+                                                    self.config.extra.payout_address,
+                                                    &pubkeys_str,
+                                                )
+                                                .await?;
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
@@ -1189,6 +1241,15 @@ impl EthgasCommitService {
             error!("invalid registration mode");
         }
 
+        if self.config.extra.enable_user_lock == Some(true) {
+            lock_user_account(
+                &client,
+                &self.config.extra.exchange_api_base,
+                &access_jwt,
+            )
+            .await?;
+        }
+
         if self.config.extra.query_pubkey {
             info!("querying all your registered pubkeys...");
             get_registered_all_pubkeys(
@@ -1253,6 +1314,16 @@ impl EthgasCommitService {
                                     &validators_str,
                                 ).await.map_err(|err| eyre::eyre!("failed to update OFAC status: {}", err))?;
 
+                                if self.config.extra.enable_light_mode == Some(true) {
+                                    enable_light_mode(
+                                        client,
+                                        &self.config.extra.registration_mode,
+                                        &self.config.extra.exchange_api_base,
+                                        access_jwt,
+                                        &validators_str,
+                                    ).await.map_err(|err| eyre::eyre!("failed to enable light mode: {}", err))?;
+                                }
+
                                 if let Some(payout_addr) = payout_address {
                                     update_payout_address(
                                         client,
@@ -1305,6 +1376,41 @@ impl EthgasCommitService {
     }
 }
 
+/// Load the module's `signing_id` directly from the commit-boost config file.
+///
+/// As of commit-boost v0.10.0, `signing_id` is a native field of the module's
+/// static config. `load_commit_module_config` consumes it (via `#[serde(flatten)]`)
+/// but does not re-expose it on `StartCommitModuleConfig`, and it can no longer be
+/// declared in `ExtraConfig` without breaking module deserialization. We therefore
+/// read it back out of the same config file (found via the same `CB_CONFIG` /
+/// `CB_MODULE_ID` env vars commit-boost uses) so it stays a single source of truth
+/// and always matches the value the signer applies.
+fn load_module_signing_id() -> Result<B256> {
+    let config_path = env::var("CB_CONFIG").unwrap_or_else(|_| "/cb-config.toml".to_string());
+    let module_id =
+        env::var("CB_MODULE_ID").map_err(|_| eyre::eyre!("CB_MODULE_ID env var not set"))?;
+
+    #[derive(Deserialize)]
+    struct ModuleSigningId {
+        id: String,
+        signing_id: B256,
+    }
+    #[derive(Deserialize)]
+    struct ConfigSigningIds {
+        modules: Vec<ModuleSigningId>,
+    }
+
+    let contents = std::fs::read_to_string(&config_path)
+        .map_err(|e| eyre::eyre!("failed to read config file {config_path}: {e}"))?;
+    let parsed: ConfigSigningIds = toml::from_str(&contents)?;
+    parsed
+        .modules
+        .into_iter()
+        .find(|m| m.id == module_id)
+        .map(|m| m.signing_id)
+        .ok_or_else(|| eyre::eyre!("no module with id {module_id} found in {config_path}"))
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -1334,7 +1440,7 @@ async fn main() -> Result<()> {
                 );
                 info!("chain: {:?}", config.chain);
 
-                let pbs_config = match load_pbs_config().await {
+                let pbs_config = match load_pbs_config(None).await {
                     Ok(config) => config,
                     Err(err) => {
                         error!("Failed to load pbs config: {err:?}");
@@ -1355,6 +1461,7 @@ async fn main() -> Result<()> {
 
                 let access_jwt: String;
                 let refresh_jwt: String;
+                let signer_address: Option<alloy::primitives::Address>;
                 if !config.extra.is_jwt_provided {
                     let eoa_signer_config = match (
                         config.extra.eoa_signing_key,
@@ -1393,7 +1500,7 @@ async fn main() -> Result<()> {
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signer_config,
                     };
-                    (access_jwt, refresh_jwt) =
+                    let (access_jwt_result, refresh_jwt_result, login_signer_address) =
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
                             let service = EthgasExchangeService {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
@@ -1406,6 +1513,9 @@ async fn main() -> Result<()> {
                             })
                         })
                         .await?;
+                    access_jwt = access_jwt_result;
+                    refresh_jwt = refresh_jwt_result;
+                    signer_address = Some(login_signer_address);
                 } else {
                     access_jwt = match config.extra.access_jwt.clone() {
                         Some(jwt) => jwt,
@@ -1427,9 +1537,10 @@ async fn main() -> Result<()> {
                             }
                         },
                     };
+                    signer_address = None;
                 }
 
-                let mux_pubkeys = match pbs_config.mux_lookup {
+                let mux_pubkeys = match pbs_config.0.mux_lookup {
                     Some(mux_map) => {
                         let mut seen = HashSet::new();
                         mux_map
@@ -1450,10 +1561,13 @@ async fn main() -> Result<()> {
                 };
 
                 if !access_jwt.is_empty() && !refresh_jwt.is_empty() {
+                    let signing_id = load_module_signing_id()?;
                     let mut commit_service = EthgasCommitService {
                         config,
+                        signing_id,
                         access_jwt,
                         refresh_jwt,
+                        signer_address,
                         mux_pubkeys,
                     };
                     if let Err(err) = commit_service.run().await {

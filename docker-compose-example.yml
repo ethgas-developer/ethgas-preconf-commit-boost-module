@@ -1,37 +1,24 @@
 services:
   cb_pbs:
-    image: ghcr.io/commit-boost/pbs:v0.9.6
+    image: ghcr.io/commit-boost/commit-boost:v0.10.0
     container_name: cb_pbs
     ports:
     - 18550:18550
     environment:
       CB_CONFIG: /cb-config.toml
-      CB_PBS_ENDPOINT: 0.0.0.0:18550
-      CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
     volumes:
     - ./config.toml:/cb-config.toml:ro
     - ./logs/pbs:/var/logs/commit-boost
     # for mux keys
     # - ./tests/data/mux_keys.json:/tests/data/mux_keys.json
-    networks:
-    - monitoring_network
-  cb_gen_jwt:
-    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:latest
-    container_name: cb_gen_jwt
-    environment:
-      CB_MODULE_ID: ETHGAS_COMMIT
-    volumes:
-    - ./.cb.env:/app/.cb.env
-    networks:
-    - monitoring_network
+    command:
+    - pbs
   cb_signer:
-    image: ghcr.io/commit-boost/signer:v0.9.6
+    image: ghcr.io/commit-boost/commit-boost:v0.10.0
     container_name: cb_signer
     environment:
       CB_CONFIG: /cb-config.toml
-      CB_SIGNER_ENDPOINT: 0.0.0.0:20000
-      CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
       # either plain key file
       # CB_SIGNER_LOADER_FILE: /keys.json
@@ -51,14 +38,15 @@ services:
     env_file: .cb.env
     networks:
     - signer_network
+    command:
+    - signer
   cb_ethgas_commit:
-    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.7
+    image: ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.1.0
     container_name: cb_ethgas_commit
     environment:
       CB_MODULE_ID: ETHGAS_COMMIT
       CB_CONFIG: /cb-config.toml
       CB_SIGNER_URL: http://cb_signer:20000
-      CB_METRICS_PORT: 10000
       CB_LOGS_DIR: /var/logs/commit-boost
     volumes:
     - ./config.toml:/cb-config.toml:ro
@@ -71,8 +59,13 @@ services:
     - signer_network
     depends_on:
     - cb_signer
+  cb_gen_jwt:
+    image: ghcr.io/ethgas-developer/commitboost_gen_jwt:latest
+    container_name: cb_gen_jwt
+    environment:
+      CB_MODULE_ID: ETHGAS_COMMIT
+    volumes:
+    - ./.cb.env:/app/.cb.env
 networks:
-  monitoring_network:
-    driver: bridge
   signer_network:
     driver: bridge
