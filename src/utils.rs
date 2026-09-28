@@ -1,6 +1,6 @@
 use eyre::Result;
-use reqwest::{Client, Url};
-use serde::Deserialize;
+use reqwest::{Client, Response, Url};
+use serde::{de::DeserializeOwned, Deserialize};
 use std::{error::Error, collections::HashMap};
 use tracing::{error, info};
 use alloy::{
@@ -14,6 +14,26 @@ use crate::{
 
 const DEFAULT_EIP712_DOMAIN_VERSION: &str = "1";
 const DEFAULT_EIP712_DOMAIN_VERIFYING_CONTRACT: alloy::primitives::Address = alloy::primitives::Address::ZERO;
+
+pub async fn parse_sensitive_json<T: DeserializeOwned>(
+    response: Response,
+    operation: &str,
+) -> Result<T> {
+    let status = response.status();
+    let body = response.bytes().await.map_err(|_| {
+        eyre::eyre!("failed to read {} response (status {})", operation, status)
+    })?;
+    let body_len = body.len();
+
+    serde_json::from_slice(&body).map_err(|_| {
+        eyre::eyre!(
+            "{} returned an invalid response (status {}, body length {})",
+            operation,
+            status,
+            body_len
+        )
+    })
+}
 
 fn validate_eip712_domain(domain: &crate::login_types::Domain, chain_id: u64, default_domain_name: &str) -> Result<()> {
     if domain.name != default_domain_name {

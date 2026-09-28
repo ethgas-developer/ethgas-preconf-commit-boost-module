@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, update_payout_address, enable_light_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -301,19 +301,22 @@ impl EthgasExchangeService {
             .query(&[("nonceHash", eip712_message.message.hash)])
             .query(&[("signature", signature_hex)])
             .send()
-            .await?;
+            .await
+            .map_err(|err| err.without_url())?;
         let refresh_jwt: String;
         if let Some(set_cookie) = res.headers().get("Set-Cookie") {
-            let cookie_str = set_cookie.to_str().expect("cannot parse cookie");
-            let cookie = Cookie::parse(cookie_str)?;
+            let cookie_str = set_cookie
+                .to_str()
+                .map_err(|_| eyre::eyre!("failed to parse refresh jwt cookie"))?;
+            let cookie = Cookie::parse(cookie_str)
+                .map_err(|_| eyre::eyre!("failed to parse refresh jwt cookie"))?;
             info!("successfully obtained refresh jwt from the exchange");
             refresh_jwt = cookie.value().to_string();
         } else {
             return Err(std::io::Error::other("Set-Cookie header not found").into());
         }
-        let res_text_login_verify = res.text().await?;
-        let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
-            .expect("Failed to parse login verification response");
+        let res_json_verify: APILoginVerifyResponse =
+            parse_sensitive_json(res, "login verification").await?;
         info!("successfully obtained access jwt from the exchange");
         exchange_api_url = Url::parse(&format!(
             "{}{}",
@@ -815,9 +818,10 @@ impl EthgasCommitService {
                             .query(&[("autoImport", false)])
                             .query(&[("sync", false)])
                             .send()
-                            .await?;
+                            .await
+                            .map_err(|err| err.without_url())?;
 
-                        match res.json::<APISsvNodeOperatorVerifyResponse>().await {
+                        match parse_sensitive_json::<APISsvNodeOperatorVerifyResponse>(res, "ssv operator verification").await {
                             Ok(result) => match result.success {
                                     true => {
                                         info!("successfully registered ssv node operator owner address");
@@ -1022,10 +1026,9 @@ impl EthgasCommitService {
                                 {
                                     if counter % 1000 == 0 && counter != 0 {
                                         exchange_api_url = Url::parse(&format!(
-                                            "{}{}{}",
+                                            "{}{}",
                                             self.config.extra.exchange_api_base,
-                                            "/api/v1/user/login/refresh?refreshToken=",
-                                            self.refresh_jwt
+                                            "/api/v1/user/login/refresh"
                                         ))?;
                                         res = client
                                             .post(exchange_api_url.to_string())
@@ -1035,9 +1038,11 @@ impl EthgasCommitService {
                                                 format!("Bearer {}", access_jwt),
                                             )
                                             .header("content-type", "application/json")
+                                            .query(&[("refreshToken", self.refresh_jwt.as_str())])
                                             .send()
-                                            .await?;
-                                        match res.json::<APILoginVerifyResponse>().await {
+                                            .await
+                                            .map_err(|err| err.without_url())?;
+                                        match parse_sensitive_json::<APILoginVerifyResponse>(res, "jwt refresh").await {
                                             Ok(res_json) => {
                                                 if res_json.success {
                                                     info!("successfully refreshed access jwt");

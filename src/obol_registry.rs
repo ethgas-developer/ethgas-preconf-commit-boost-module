@@ -2,7 +2,7 @@ use crate::{
     login_types::EoaSigner,
     dvt_types::KeystoreConfig,
     ofac::update_ofac,
-    utils::{enable_light_mode, generate_eip712_signature_for_dvt, update_payout_address}
+    utils::{enable_light_mode, generate_eip712_signature_for_dvt, parse_sensitive_json, update_payout_address}
 };
 use alloy::{
     primitives::B256,
@@ -323,9 +323,10 @@ pub async fn register_obol_keys(
                 .query(&[("autoImport", false)])
                 .query(&[("sync", false)])
                 .send()
-                .await?;
+                .await
+                .map_err(|err| err.without_url())?;
 
-            match res.json::<APIObolNodeOperatorVerifyResponse>().await {
+            match parse_sensitive_json::<APIObolNodeOperatorVerifyResponse>(res, "obol operator verification").await {
                 Ok(result) => match result.success {
                     true => {
                         info!("successfully registered obol node operator owner address");
