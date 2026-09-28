@@ -564,8 +564,8 @@ impl EthgasCommitService {
                                 operator_signers
                             }
                             None => {
-                                let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORES");
-                                let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSOWRDS");
+                                let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS");
+                                let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS");
 
                                 match (keystore_paths, password_paths) {
                                     (Ok(keystore_paths), Ok(password_paths)) => {
@@ -579,7 +579,7 @@ impl EthgasCommitService {
                                             .collect::<Vec<_>>();
 
                                         if keystore_paths.len() != password_paths.len() {
-                                            return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORES & SSV_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                            return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS & SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS should have the same array length").into());
                                         }
 
                                         let mut operator_signers = Vec::new();

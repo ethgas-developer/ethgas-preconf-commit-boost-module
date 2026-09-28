@@ -163,8 +163,8 @@ pub async fn register_obol_keys(
                                 operator_signers
                             }
                             None => {
-                                let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORES");
-                                let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSOWRDS");
+                                let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORE_PATHS");
+                                let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSWORD_PATHS");
 
                                 match (keystore_paths, password_paths) {
                                     (Ok(keystore_paths), Ok(password_paths)) => {
@@ -178,7 +178,7 @@ pub async fn register_obol_keys(
                                             .collect::<Vec<_>>();
 
                                         if keystore_paths.len() != password_paths.len() {
-                                            return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORES & OBOL_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                            return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORE_PATHS & OBOL_NODE_OPERATOR_OWNER_PASSWORD_PATHS should have the same array length").into());
                                         }
 
                                         let mut operator_signers = Vec::new();
