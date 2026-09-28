@@ -45,6 +45,7 @@ struct EthgasExchangeService {
     exchange_api_base: String,
     entity_name: String,
     eoa_signer_config: EoaSignerConfig,
+    chain_id: u64
 }
 
 #[derive(Clone)]
@@ -67,6 +68,7 @@ struct EthgasCommitService {
     refresh_jwt: String,
     signer_address: Option<alloy::primitives::Address>,
     mux_pubkeys: Vec<BlsPublicKey>,
+    chain_id: u64
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -287,7 +289,7 @@ impl EthgasExchangeService {
             serde_json::from_str(&res_json_login.data.eip712_message)
                 .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
         let signature_hex =
-            generate_eip712_signature(&res_json_login.data.eip712_message, &signer).await?;
+            generate_eip712_signature(&res_json_login.data.eip712_message, &signer, self.chain_id).await?;
         exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/login/verify"
@@ -796,6 +798,8 @@ impl EthgasCommitService {
                                 .message_to_sign
                                 .unwrap_or_default(),
                             signer,
+                            self.chain_id,
+                            "Ethgas SSV operator verification"
                         )
                         .await?;
                         exchange_api_url = Url::parse(&format!(
@@ -927,6 +931,7 @@ impl EthgasCommitService {
             }
         } else if self.config.extra.registration_mode == "obol" {
             register_obol_keys(
+                self.chain_id,
                 &client,
                 &access_jwt,
                 &self.config.extra.exchange_api_base,
@@ -1062,18 +1067,8 @@ impl EthgasCommitService {
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str.clone());
                                     form_data.insert("signatures", signatures_str);
-                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));
-                                    let chain_id = if self.config.extra.exchange_api_base.contains("hoodi") {
-                                        "560048"
-                                    } else if self.config.extra.exchange_api_base.contains("mainnet") {
-                                        "1"
-                                    } else {
-                                        return Err(std::io::Error::other(
-                                            "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
-                                        )
-                                        .into());
-                                    };
-                                    form_data.insert("chainId", chain_id.to_string());
+                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));                                 
+                                    form_data.insert("chainId", self.chain_id.to_string());
                                     exchange_api_url = Url::parse(&format!(
                                         "{}{}",
                                         self.config.extra.exchange_api_base,
@@ -1459,6 +1454,17 @@ async fn main() -> Result<()> {
                     return Err(std::io::Error::other("invalid collateral_per_slot").into());
                 }
 
+                let chain_id = if config.extra.exchange_api_base.contains("hoodi") {
+                    560048
+                } else if config.extra.exchange_api_base.contains("mainnet") {
+                    1
+                } else {
+                    return Err(std::io::Error::other(
+                        "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
+                    )
+                    .into());
+                };
+
                 let access_jwt: String;
                 let refresh_jwt: String;
                 let signer_address: Option<alloy::primitives::Address>;
@@ -1499,6 +1505,7 @@ async fn main() -> Result<()> {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signer_config,
+                        chain_id
                     };
                     let (access_jwt_result, refresh_jwt_result, login_signer_address) =
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
@@ -1506,6 +1513,7 @@ async fn main() -> Result<()> {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
                                 entity_name: exchange_service.entity_name.clone(),
                                 eoa_signer_config: exchange_service.eoa_signer_config.clone(),
+                                chain_id: exchange_service.chain_id.clone(),
                             };
                             service.login().await.map_err(|err| {
                                 error!(?err, "Service failed");
@@ -1569,6 +1577,7 @@ async fn main() -> Result<()> {
                         refresh_jwt,
                         signer_address,
                         mux_pubkeys,
+                        chain_id
                     };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);

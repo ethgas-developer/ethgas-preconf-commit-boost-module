@@ -12,6 +12,45 @@ use crate::{
     dvt_types::Eip712MessageDvt
 };
 
+const DEFAULT_EIP712_DOMAIN_VERSION: &str = "1";
+const DEFAULT_EIP712_DOMAIN_VERIFYING_CONTRACT: alloy::primitives::Address = alloy::primitives::Address::ZERO;
+
+fn validate_eip712_domain(domain: &crate::login_types::Domain, chain_id: u64, default_domain_name: &str) -> Result<()> {
+    if domain.name != default_domain_name {
+        return Err(eyre::eyre!(
+            "Invalid EIP712 domain name: expected {:?}, got {:?}",
+            default_domain_name,
+            domain.name
+        ));
+    }
+
+    if domain.version != DEFAULT_EIP712_DOMAIN_VERSION {
+        return Err(eyre::eyre!(
+            "Invalid EIP712 domain version: expected {:?}, got {:?}",
+            DEFAULT_EIP712_DOMAIN_VERSION,
+            domain.version
+        ));
+    }
+
+    if domain.chain_id != chain_id {
+        return Err(eyre::eyre!(
+            "Invalid EIP712 domain chain ID: expected {}, got {}",
+            chain_id,
+            domain.chain_id
+        ));
+    }
+
+    if domain.verifying_contract != DEFAULT_EIP712_DOMAIN_VERIFYING_CONTRACT {
+        return Err(eyre::eyre!(
+            "Invalid EIP712 domain verifying contract: expected {:?}, got {:?}",
+            DEFAULT_EIP712_DOMAIN_VERIFYING_CONTRACT,
+            domain.verifying_contract
+        ));
+    }
+
+    Ok(())
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct APIUpdatePayoutAddrResponse {
@@ -256,11 +295,13 @@ pub async fn update_payout_address(
 
 pub async fn generate_eip712_signature(
     eip712_message_str: &str, 
-    signer: &EoaSigner
+    signer: &EoaSigner,
+    chain_id: u64
 ) -> Result<String> {
 
     let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+    validate_eip712_domain(&eip712_message.domain, chain_id, "Ethgas Login")?;
 
     let domain = eip712_domain! {
         name: eip712_message.domain.name,
@@ -284,9 +325,12 @@ pub async fn generate_eip712_signature(
 pub async fn generate_eip712_signature_for_dvt(
     eip712_message_str: &str,
     signer: &EoaSigner,
+    chain_id: u64,
+    default_domain_name: &str
 ) -> Result<String> {
     let eip712_message: Eip712MessageDvt = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
+    validate_eip712_domain(&eip712_message.domain, chain_id, default_domain_name)?;
 
     let domain = eip712_domain! {
         name: eip712_message.domain.name,

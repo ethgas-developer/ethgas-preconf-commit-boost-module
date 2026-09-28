@@ -72,6 +72,7 @@ struct APIObolValidatorDeregisterResponseData {
 }
 
 pub async fn register_obol_keys(
+    chain_id: u64,
     client: &Client,
     access_jwt: &str,
     config_extra_exchange_api_base: &str,
@@ -305,6 +306,8 @@ pub async fn register_obol_keys(
                     .message_to_sign
                     .unwrap_or_default(),
                 signer,
+                chain_id,
+                "Ethgas Obol operator verification"
             )
             .await?;
             exchange_api_url = Url::parse(&format!(
