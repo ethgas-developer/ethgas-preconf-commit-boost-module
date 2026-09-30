@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, get_user_address, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -795,6 +795,11 @@ impl EthgasCommitService {
                         }
                     };
                     if res_json_ssv_node_operator_register.data.available {
+                        let signer_address = self.signer_address.ok_or_else(|| {
+                            eyre::eyre!(
+                                "signer_address is required for SSV/Obol operator verification"
+                            )
+                        })?;
                         let signature_hex = generate_eip712_signature_for_dvt(
                             &res_json_ssv_node_operator_register
                                 .data
@@ -802,7 +807,8 @@ impl EthgasCommitService {
                                 .unwrap_or_default(),
                             signer,
                             self.chain_id,
-                            "Ethgas SSV operator verification"
+                            "Ethgas SSV operator verification",
+                            signer_address
                         )
                         .await?;
                         exchange_api_url = Url::parse(&format!(
@@ -934,6 +940,11 @@ impl EthgasCommitService {
                 }
             }
         } else if self.config.extra.registration_mode == "obol" {
+            let signer_address = self.signer_address.ok_or_else(|| {
+                eyre::eyre!(
+                    "signer_address is required for SSV/Obol operator verification"
+                )
+            })?;
             register_obol_keys(
                 self.chain_id,
                 &client,
@@ -950,6 +961,7 @@ impl EthgasCommitService {
                 &self.config.extra.obol_node_operator_owner_ledger_paths,
                 &self.config.extra.obol_node_operator_owner_validator_pubkeys,
                 &self.config.extra.obol_node_operator_owner_payout_addresses,
+                signer_address
             )
             .await?;
         } else if self.config.extra.registration_mode == "standard"
@@ -1550,7 +1562,15 @@ async fn main() -> Result<()> {
                             }
                         },
                     };
-                    signer_address = None;
+                    let client = Client::new();
+                    let raw_signer_address = get_user_address(
+                        &client,
+                        &config.extra.exchange_api_base,
+                        &access_jwt,
+                    )
+                    .await?;
+                    info!("ETHGas EOA address: {}", raw_signer_address);
+                    signer_address = Some(raw_signer_address);
                 }
 
                 let mux_pubkeys = match pbs_config.0.mux_lookup {

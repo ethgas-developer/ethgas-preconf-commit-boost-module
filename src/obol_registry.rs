@@ -87,6 +87,7 @@ pub async fn register_obol_keys(
     config_extra_obol_node_operator_owner_ledger_paths: &Option<Vec<String>>,
     config_extra_obol_node_operator_owner_validator_pubkeys: &Option<Vec<Vec<BlsPublicKey>>>,
     config_extra_obol_node_operator_owner_payout_addresses: &Option<Vec<alloy::primitives::Address>>,
+    user_address: alloy::primitives::Address
 ) -> Result<(), Box<dyn Error>> {
     let obol_node_operator_owner_validator_pubkeys =
         match config_extra_obol_node_operator_owner_validator_pubkeys {
@@ -307,7 +308,8 @@ pub async fn register_obol_keys(
                     .unwrap_or_default(),
                 signer,
                 chain_id,
-                "Ethgas Obol operator verification"
+                "Ethgas Obol operator verification",
+                user_address
             )
             .await?;
             exchange_api_url = Url::parse(&format!(

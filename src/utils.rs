@@ -35,7 +35,13 @@ pub async fn parse_sensitive_json<T: DeserializeOwned>(
     })
 }
 
-fn validate_eip712_domain(domain: &crate::login_types::Domain, chain_id: u64, default_domain_name: &str) -> Result<()> {
+fn validate_eip712_domain_and_message(
+    domain: &crate::login_types::Domain,
+    chain_id: u64,
+    default_domain_name: &str,
+    user_address: Option<&str>,
+    default_user_address: Option<alloy::primitives::Address>,
+) -> Result<()> {
     if domain.name != default_domain_name {
         return Err(eyre::eyre!(
             "Invalid EIP712 domain name: expected {:?}, got {:?}",
@@ -66,6 +72,19 @@ fn validate_eip712_domain(domain: &crate::login_types::Domain, chain_id: u64, de
             DEFAULT_EIP712_DOMAIN_VERIFYING_CONTRACT,
             domain.verifying_contract
         ));
+    }
+
+    if let (Some(user_address), Some(default_user_address)) = (user_address, default_user_address) {
+        let user_address = user_address
+            .parse::<alloy::primitives::Address>()
+            .map_err(|e| eyre::eyre!("Invalid EIP712 user address {:?}: {}", user_address, e))?;
+        if user_address != default_user_address {
+            return Err(eyre::eyre!(
+                "Invalid EIP712 user address: expected signer address {}, got {}",
+                default_user_address,
+                user_address
+            ));
+        }
     }
 
     Ok(())
@@ -101,6 +120,58 @@ pub struct APIValidatorModeResponseData {
 pub struct APILockUserResponse {
     pub success: bool,
     pub error_msg_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct APIUserInfoResponse {
+    success: bool,
+    data: Option<APIUserInfoResponseData>,
+    error_msg_key: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserInfoResponseData {
+    user: APIUserInfoUser,
+}
+
+#[derive(Debug, Deserialize)]
+struct APIUserInfoUser {
+    address: String,
+}
+
+pub async fn get_user_address(
+    client: &Client,
+    exchange_api_base: &str,
+    access_jwt: &str,
+) -> Result<alloy::primitives::Address> {
+    let exchange_api_url = Url::parse(&format!(
+        "{}{}",
+        exchange_api_base, "/api/v1/user/info"
+    ))?;
+    let res = client
+        .get(exchange_api_url.to_string())
+        .header("Authorization", format!("Bearer {}", access_jwt))
+        .send()
+        .await
+        .map_err(|err| err.without_url())?;
+    let result: APIUserInfoResponse = parse_sensitive_json(res, "user info").await?;
+
+    if !result.success {
+        return Err(eyre::eyre!(
+            "failed to get user info: {}",
+            result.error_msg_key.unwrap_or_default()
+        ));
+    }
+
+    let address = result
+        .data
+        .ok_or_else(|| eyre::eyre!("user info response did not contain user data"))?
+        .user
+        .address;
+    address
+        .parse::<alloy::primitives::Address>()
+        .map_err(|err| eyre::eyre!("invalid user address `{}`: {}", address, err))
 }
 
 pub async fn lock_user_account(
@@ -321,7 +392,7 @@ pub async fn generate_eip712_signature(
 
     let eip712_message: Eip712Message = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-    validate_eip712_domain(&eip712_message.domain, chain_id, "Ethgas Login")?;
+    validate_eip712_domain_and_message(&eip712_message.domain, chain_id, "Ethgas Login", None, None)?;
 
     let domain = eip712_domain! {
         name: eip712_message.domain.name,
@@ -346,11 +417,18 @@ pub async fn generate_eip712_signature_for_dvt(
     eip712_message_str: &str,
     signer: &EoaSigner,
     chain_id: u64,
-    default_domain_name: &str
+    default_domain_name: &str,
+    default_user_address: alloy::primitives::Address
 ) -> Result<String> {
     let eip712_message: Eip712MessageDvt = serde_json::from_str(eip712_message_str)
         .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-    validate_eip712_domain(&eip712_message.domain, chain_id, default_domain_name)?;
+    validate_eip712_domain_and_message(
+        &eip712_message.domain,
+        chain_id,
+        default_domain_name,
+        Some(&eip712_message.message.user_address),
+        Some(default_user_address),
+    )?;
 
     let domain = eip712_domain! {
         name: eip712_message.domain.name,
