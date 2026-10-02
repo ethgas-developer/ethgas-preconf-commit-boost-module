@@ -122,58 +122,6 @@ pub struct APILockUserResponse {
     pub error_msg_key: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct APIUserInfoResponse {
-    success: bool,
-    data: Option<APIUserInfoResponseData>,
-    error_msg_key: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIUserInfoResponseData {
-    user: APIUserInfoUser,
-}
-
-#[derive(Debug, Deserialize)]
-struct APIUserInfoUser {
-    address: String,
-}
-
-pub async fn get_user_address(
-    client: &Client,
-    exchange_api_base: &str,
-    access_jwt: &str,
-) -> Result<alloy::primitives::Address> {
-    let exchange_api_url = Url::parse(&format!(
-        "{}{}",
-        exchange_api_base, "/api/v1/user/info"
-    ))?;
-    let res = client
-        .get(exchange_api_url.to_string())
-        .header("Authorization", format!("Bearer {}", access_jwt))
-        .send()
-        .await
-        .map_err(|err| err.without_url())?;
-    let result: APIUserInfoResponse = parse_sensitive_json(res, "user info").await?;
-
-    if !result.success {
-        return Err(eyre::eyre!(
-            "failed to get user info: {}",
-            result.error_msg_key.unwrap_or_default()
-        ));
-    }
-
-    let address = result
-        .data
-        .ok_or_else(|| eyre::eyre!("user info response did not contain user data"))?
-        .user
-        .address;
-    address
-        .parse::<alloy::primitives::Address>()
-        .map_err(|err| eyre::eyre!("invalid user address `{}`: {}", address, err))
-}
-
 pub async fn lock_user_account(
     client: &Client,
     exchange_api_base: &str,

@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, get_user_address, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -93,6 +93,7 @@ struct ExtraConfig {
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
     query_pubkey: bool,
+    eoa_address: Option<alloy::primitives::Address>,
     eoa_signing_key: Option<B256>,
     eoa_ledger_path: Option<String>,
     access_jwt: Option<String>,
@@ -1562,15 +1563,11 @@ async fn main() -> Result<()> {
                             }
                         },
                     };
-                    let client = Client::new();
-                    let raw_signer_address = get_user_address(
-                        &client,
-                        &config.extra.exchange_api_base,
-                        &access_jwt,
-                    )
-                    .await?;
-                    info!("ETHGas EOA address: {}", raw_signer_address);
-                    signer_address = Some(raw_signer_address);
+                    let eoa_address = config.extra.eoa_address.ok_or_else(|| {
+                        eyre::eyre!("eoa_address is required when is_jwt_provided is true")
+                    })?;
+                    info!("ETHGas EOA address: {}", eoa_address);
+                    signer_address = Some(eoa_address);
                 }
 
                 let mux_pubkeys = match pbs_config.0.mux_lookup {

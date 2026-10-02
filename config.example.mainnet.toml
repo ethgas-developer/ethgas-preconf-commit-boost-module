@@ -485,6 +485,7 @@ eoa_signing_key = "0x..." # for registration in exchange, required if is_jwt_pro
 # OPTIONAL
 access_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
 refresh_jwt = "xxx.xxx.xxx" # required if is_jwt_provided = true
+eoa_address = "0x..." # ETHGas account address matching the JWT, required if is_jwt_provided = true
 
 # Below configs are only for ssv validators.
 # ssv_node_operator_owner_mode = "key" # key, keystore, ledger, tx
