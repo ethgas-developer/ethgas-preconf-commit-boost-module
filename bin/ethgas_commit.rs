@@ -1451,7 +1451,7 @@ async fn main() -> Result<()> {
                     version = env!("CARGO_PKG_VERSION"),
                     "Starting module with custom data"
                 );
-                info!("chain: {:?}", config.chain);
+                info!("chain: {:?}, exchange_api_base: {:?}", config.chain, config.extra.exchange_api_base);
 
                 let pbs_config = match load_pbs_config(None).await {
                     Ok(config) => config,
