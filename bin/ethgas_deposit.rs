@@ -11,6 +11,7 @@ use alloy::{
 };
 use chrono::DateTime;
 use commit_boost::prelude::*;
+use ethgas_commit::utils::parse_sensitive_json;
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
@@ -233,10 +234,10 @@ impl EthgasExchangeService {
             .query(&[("nonceHash", eip712_sub_message.hash)])
             .query(&[("signature", signature_hex)])
             .send()
-            .await?;
-        let res_text_login_verify = res.text().await?;
-        let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
-            .expect("Failed to parse login verification response");
+            .await
+            .map_err(|err| err.without_url())?;
+        let res_json_verify: APILoginVerifyResponse =
+            parse_sensitive_json(res, "login verification").await?;
         info!("successfully obtained access jwt from the exchange");
         Ok(res_json_verify.data.access_token.token)
         // info!("API Response as JSON: {}", res.json::<Value>().await?);

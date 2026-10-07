@@ -15,7 +15,7 @@ use ethgas_commit::{
     query_pubkey::{
         get_registered_all_pubkeys, get_registered_obol_pubkeys, get_registered_ssv_pubkeys,
     },
-    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, update_payout_address, enable_light_mode}
+    utils::{generate_eip712_signature, generate_eip712_signature_for_dvt, lock_user_account, parse_sensitive_json, update_payout_address, enable_light_mode}
 };
 use eyre::Result;
 use lazy_static::lazy_static;
@@ -45,6 +45,7 @@ struct EthgasExchangeService {
     exchange_api_base: String,
     entity_name: String,
     eoa_signer_config: EoaSignerConfig,
+    chain_id: u64
 }
 
 #[derive(Clone)]
@@ -67,6 +68,7 @@ struct EthgasCommitService {
     refresh_jwt: String,
     signer_address: Option<alloy::primitives::Address>,
     mux_pubkeys: Vec<BlsPublicKey>,
+    chain_id: u64
 }
 
 // Extra configurations parameters can be set here and will be automatically
@@ -91,6 +93,7 @@ struct ExtraConfig {
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
     query_pubkey: bool,
+    eoa_address: Option<alloy::primitives::Address>,
     eoa_signing_key: Option<B256>,
     eoa_ledger_path: Option<String>,
     access_jwt: Option<String>,
@@ -287,7 +290,7 @@ impl EthgasExchangeService {
             serde_json::from_str(&res_json_login.data.eip712_message)
                 .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
         let signature_hex =
-            generate_eip712_signature(&res_json_login.data.eip712_message, &signer).await?;
+            generate_eip712_signature(&res_json_login.data.eip712_message, &signer, self.chain_id).await?;
         exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/login/verify"
@@ -299,19 +302,22 @@ impl EthgasExchangeService {
             .query(&[("nonceHash", eip712_message.message.hash)])
             .query(&[("signature", signature_hex)])
             .send()
-            .await?;
+            .await
+            .map_err(|err| err.without_url())?;
         let refresh_jwt: String;
         if let Some(set_cookie) = res.headers().get("Set-Cookie") {
-            let cookie_str = set_cookie.to_str().expect("cannot parse cookie");
-            let cookie = Cookie::parse(cookie_str)?;
+            let cookie_str = set_cookie
+                .to_str()
+                .map_err(|_| eyre::eyre!("failed to parse refresh jwt cookie"))?;
+            let cookie = Cookie::parse(cookie_str)
+                .map_err(|_| eyre::eyre!("failed to parse refresh jwt cookie"))?;
             info!("successfully obtained refresh jwt from the exchange");
             refresh_jwt = cookie.value().to_string();
         } else {
             return Err(std::io::Error::other("Set-Cookie header not found").into());
         }
-        let res_text_login_verify = res.text().await?;
-        let res_json_verify: APILoginVerifyResponse = serde_json::from_str(&res_text_login_verify)
-            .expect("Failed to parse login verification response");
+        let res_json_verify: APILoginVerifyResponse =
+            parse_sensitive_json(res, "login verification").await?;
         info!("successfully obtained access jwt from the exchange");
         exchange_api_url = Url::parse(&format!(
             "{}{}",
@@ -562,8 +568,8 @@ impl EthgasCommitService {
                                 operator_signers
                             }
                             None => {
-                                let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORES");
-                                let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSOWRDS");
+                                let keystore_paths = env::var("SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS");
+                                let password_paths = env::var("SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS");
 
                                 match (keystore_paths, password_paths) {
                                     (Ok(keystore_paths), Ok(password_paths)) => {
@@ -577,7 +583,7 @@ impl EthgasCommitService {
                                             .collect::<Vec<_>>();
 
                                         if keystore_paths.len() != password_paths.len() {
-                                            return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORES & SSV_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                            return Err(std::io::Error::other("SSV_NODE_OPERATOR_OWNER_KEYSTORE_PATHS & SSV_NODE_OPERATOR_OWNER_PASSWORD_PATHS should have the same array length").into());
                                         }
 
                                         let mut operator_signers = Vec::new();
@@ -790,12 +796,20 @@ impl EthgasCommitService {
                         }
                     };
                     if res_json_ssv_node_operator_register.data.available {
+                        let signer_address = self.signer_address.ok_or_else(|| {
+                            eyre::eyre!(
+                                "signer_address is required for SSV/Obol operator verification"
+                            )
+                        })?;
                         let signature_hex = generate_eip712_signature_for_dvt(
                             &res_json_ssv_node_operator_register
                                 .data
                                 .message_to_sign
                                 .unwrap_or_default(),
                             signer,
+                            self.chain_id,
+                            "Ethgas SSV operator verification",
+                            signer_address
                         )
                         .await?;
                         exchange_api_url = Url::parse(&format!(
@@ -811,9 +825,10 @@ impl EthgasCommitService {
                             .query(&[("autoImport", false)])
                             .query(&[("sync", false)])
                             .send()
-                            .await?;
+                            .await
+                            .map_err(|err| err.without_url())?;
 
-                        match res.json::<APISsvNodeOperatorVerifyResponse>().await {
+                        match parse_sensitive_json::<APISsvNodeOperatorVerifyResponse>(res, "ssv operator verification").await {
                             Ok(result) => match result.success {
                                     true => {
                                         info!("successfully registered ssv node operator owner address");
@@ -926,7 +941,13 @@ impl EthgasCommitService {
                 }
             }
         } else if self.config.extra.registration_mode == "obol" {
+            let signer_address = self.signer_address.ok_or_else(|| {
+                eyre::eyre!(
+                    "signer_address is required for SSV/Obol operator verification"
+                )
+            })?;
             register_obol_keys(
+                self.chain_id,
                 &client,
                 &access_jwt,
                 &self.config.extra.exchange_api_base,
@@ -941,6 +962,7 @@ impl EthgasCommitService {
                 &self.config.extra.obol_node_operator_owner_ledger_paths,
                 &self.config.extra.obol_node_operator_owner_validator_pubkeys,
                 &self.config.extra.obol_node_operator_owner_payout_addresses,
+                signer_address
             )
             .await?;
         } else if self.config.extra.registration_mode == "standard"
@@ -1017,10 +1039,9 @@ impl EthgasCommitService {
                                 {
                                     if counter % 1000 == 0 && counter != 0 {
                                         exchange_api_url = Url::parse(&format!(
-                                            "{}{}{}",
+                                            "{}{}",
                                             self.config.extra.exchange_api_base,
-                                            "/api/v1/user/login/refresh?refreshToken=",
-                                            self.refresh_jwt
+                                            "/api/v1/user/login/refresh"
                                         ))?;
                                         res = client
                                             .post(exchange_api_url.to_string())
@@ -1030,9 +1051,11 @@ impl EthgasCommitService {
                                                 format!("Bearer {}", access_jwt),
                                             )
                                             .header("content-type", "application/json")
+                                            .query(&[("refreshToken", self.refresh_jwt.as_str())])
                                             .send()
-                                            .await?;
-                                        match res.json::<APILoginVerifyResponse>().await {
+                                            .await
+                                            .map_err(|err| err.without_url())?;
+                                        match parse_sensitive_json::<APILoginVerifyResponse>(res, "jwt refresh").await {
                                             Ok(res_json) => {
                                                 if res_json.success {
                                                     info!("successfully refreshed access jwt");
@@ -1062,18 +1085,8 @@ impl EthgasCommitService {
                                     let mut form_data = HashMap::new();
                                     form_data.insert("publicKeys", pubkeys_str.clone());
                                     form_data.insert("signatures", signatures_str);
-                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));
-                                    let chain_id = if self.config.extra.exchange_api_base.contains("hoodi") {
-                                        "560048"
-                                    } else if self.config.extra.exchange_api_base.contains("mainnet") {
-                                        "1"
-                                    } else {
-                                        return Err(std::io::Error::other(
-                                            "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
-                                        )
-                                        .into());
-                                    };
-                                    form_data.insert("chainId", chain_id.to_string());
+                                    form_data.insert("signingId", format!("{:#x}", self.signing_id));                                 
+                                    form_data.insert("chainId", self.chain_id.to_string());
                                     exchange_api_url = Url::parse(&format!(
                                         "{}{}",
                                         self.config.extra.exchange_api_base,
@@ -1438,7 +1451,7 @@ async fn main() -> Result<()> {
                     version = env!("CARGO_PKG_VERSION"),
                     "Starting module with custom data"
                 );
-                info!("chain: {:?}", config.chain);
+                info!("chain: {:?}, exchange_api_base: {:?}", config.chain, config.extra.exchange_api_base);
 
                 let pbs_config = match load_pbs_config(None).await {
                     Ok(config) => config,
@@ -1458,6 +1471,17 @@ async fn main() -> Result<()> {
                     error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
                     return Err(std::io::Error::other("invalid collateral_per_slot").into());
                 }
+
+                let chain_id = if config.extra.exchange_api_base.contains("hoodi") {
+                    560048
+                } else if config.extra.exchange_api_base.contains("mainnet") {
+                    1
+                } else {
+                    return Err(std::io::Error::other(
+                        "cannot determine chainId: exchange_api_base must contain 'hoodi' or 'mainnet'",
+                    )
+                    .into());
+                };
 
                 let access_jwt: String;
                 let refresh_jwt: String;
@@ -1499,6 +1523,7 @@ async fn main() -> Result<()> {
                         exchange_api_base: config.extra.exchange_api_base.clone(),
                         entity_name: config.extra.entity_name.clone(),
                         eoa_signer_config,
+                        chain_id
                     };
                     let (access_jwt_result, refresh_jwt_result, login_signer_address) =
                         Retry::spawn(FixedInterval::from_millis(500).take(5), || async {
@@ -1506,6 +1531,7 @@ async fn main() -> Result<()> {
                                 exchange_api_base: exchange_service.exchange_api_base.clone(),
                                 entity_name: exchange_service.entity_name.clone(),
                                 eoa_signer_config: exchange_service.eoa_signer_config.clone(),
+                                chain_id: exchange_service.chain_id.clone(),
                             };
                             service.login().await.map_err(|err| {
                                 error!(?err, "Service failed");
@@ -1537,7 +1563,11 @@ async fn main() -> Result<()> {
                             }
                         },
                     };
-                    signer_address = None;
+                    let eoa_address = config.extra.eoa_address.ok_or_else(|| {
+                        eyre::eyre!("eoa_address is required when is_jwt_provided is true")
+                    })?;
+                    info!("ETHGas EOA address: {}", eoa_address);
+                    signer_address = Some(eoa_address);
                 }
 
                 let mux_pubkeys = match pbs_config.0.mux_lookup {
@@ -1569,6 +1599,7 @@ async fn main() -> Result<()> {
                         refresh_jwt,
                         signer_address,
                         mux_pubkeys,
+                        chain_id
                     };
                     if let Err(err) = commit_service.run().await {
                         error!(?err);

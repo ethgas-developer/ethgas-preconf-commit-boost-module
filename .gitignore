@@ -11,6 +11,8 @@ config.holesky.toml
 config.mainnet.toml
 config.testchain.toml
 config.hoodi.toml
+config.hoodi_prod.toml
+config.hoodi_test.toml
 config.sepolia.toml
 docker-compose.yml
 .DS_Store

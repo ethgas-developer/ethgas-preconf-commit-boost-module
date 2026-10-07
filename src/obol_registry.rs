@@ -2,7 +2,7 @@ use crate::{
     login_types::EoaSigner,
     dvt_types::KeystoreConfig,
     ofac::update_ofac,
-    utils::{enable_light_mode, generate_eip712_signature_for_dvt, update_payout_address}
+    utils::{enable_light_mode, generate_eip712_signature_for_dvt, parse_sensitive_json, update_payout_address}
 };
 use alloy::{
     primitives::B256,
@@ -72,6 +72,7 @@ struct APIObolValidatorDeregisterResponseData {
 }
 
 pub async fn register_obol_keys(
+    chain_id: u64,
     client: &Client,
     access_jwt: &str,
     config_extra_exchange_api_base: &str,
@@ -86,6 +87,7 @@ pub async fn register_obol_keys(
     config_extra_obol_node_operator_owner_ledger_paths: &Option<Vec<String>>,
     config_extra_obol_node_operator_owner_validator_pubkeys: &Option<Vec<Vec<BlsPublicKey>>>,
     config_extra_obol_node_operator_owner_payout_addresses: &Option<Vec<alloy::primitives::Address>>,
+    user_address: alloy::primitives::Address
 ) -> Result<(), Box<dyn Error>> {
     let obol_node_operator_owner_validator_pubkeys =
         match config_extra_obol_node_operator_owner_validator_pubkeys {
@@ -162,8 +164,8 @@ pub async fn register_obol_keys(
                                 operator_signers
                             }
                             None => {
-                                let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORES");
-                                let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSOWRDS");
+                                let keystore_paths = env::var("OBOL_NODE_OPERATOR_OWNER_KEYSTORE_PATHS");
+                                let password_paths = env::var("OBOL_NODE_OPERATOR_OWNER_PASSWORD_PATHS");
 
                                 match (keystore_paths, password_paths) {
                                     (Ok(keystore_paths), Ok(password_paths)) => {
@@ -177,7 +179,7 @@ pub async fn register_obol_keys(
                                             .collect::<Vec<_>>();
 
                                         if keystore_paths.len() != password_paths.len() {
-                                            return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORES & OBOL_NODE_OPERATOR_OWNER_PASSWORDS should have the same array length").into());
+                                            return Err(std::io::Error::other("OBOL_NODE_OPERATOR_OWNER_KEYSTORE_PATHS & OBOL_NODE_OPERATOR_OWNER_PASSWORD_PATHS should have the same array length").into());
                                         }
 
                                         let mut operator_signers = Vec::new();
@@ -305,6 +307,9 @@ pub async fn register_obol_keys(
                     .message_to_sign
                     .unwrap_or_default(),
                 signer,
+                chain_id,
+                "Ethgas Obol operator verification",
+                user_address
             )
             .await?;
             exchange_api_url = Url::parse(&format!(
@@ -320,9 +325,10 @@ pub async fn register_obol_keys(
                 .query(&[("autoImport", false)])
                 .query(&[("sync", false)])
                 .send()
-                .await?;
+                .await
+                .map_err(|err| err.without_url())?;
 
-            match res.json::<APIObolNodeOperatorVerifyResponse>().await {
+            match parse_sensitive_json::<APIObolNodeOperatorVerifyResponse>(res, "obol operator verification").await {
                 Ok(result) => match result.success {
                     true => {
                         info!("successfully registered obol node operator owner address");
