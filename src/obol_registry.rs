@@ -78,7 +78,6 @@ pub async fn register_obol_keys(
     config_extra_exchange_api_base: &str,
     config_extra_enable_registration: bool,
     config_extra_registration_mode: &str,
-    config_extra_enable_pricer: bool,
     config_extra_enable_ofac: bool,
     config_extra_enable_light_mode: Option<bool>,
     config_extra_obol_node_operator_owner_mode: &Option<String>,
@@ -414,11 +413,7 @@ pub async fn register_obol_keys(
                                 None => warn!("no pubkey was registered. those pubkeys may not be found in any obol cluster"),
                                 Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any obol cluster"),
                                 Some(_) => {
-                                    if config_extra_enable_pricer {
-                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
-                                    } else {
-                                        info!("successful registration, you can now sell preconfs on ETHGas");
-                                    }
+                                    info!("successful registration");
                                     let result_data_validators = result.data.added.unwrap_or_default();
                                     info!(registered_validators = ?result_data_validators, number = result_data_validators.len());
                                     let validators_str = result_data_validators

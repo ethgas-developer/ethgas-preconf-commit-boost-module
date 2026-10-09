@@ -413,8 +413,9 @@ exchange_api_base = "https://mainnet.app.ethgas.com"
 entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, figment, kelp, kiln, nethermind, node_monster, p2p, piertwo, rocket_pool, sensei_node, ssv, staked, stakefish, validation_cloud, stake_capital, solo, other
 
 # Indicates the waiting time before re-running the module, set it as 0 to stop re-running the module.
-# REQUIRED
-overall_wait_interval_in_second = 0
+# Defaults to 0 when omitted (run once).
+# OPTIONAL
+# overall_wait_interval_in_second = 0
 
 # Mode of registration.
 # Supported values: standard, standard-mux, ssv, obol, skipped
@@ -431,14 +432,14 @@ registration_mode = "standard"
 enable_registration = true
 
 # Enable to delegate to the the ETHGas default pricer to help you to sell preconfs.
-# REQUIRED
-enable_pricer = true
+# OPTIONAL
+# enable_pricer = true
 
 # Set to true to delegate to a specific external builder to build the block. 
 # Regardless of whether the builder delegation is enabled or not, 
 # our fallback builder will always build a backup block which can fulfill all the preconf commitments.
-# REQUIRED
-enable_builder = false
+# OPTIONAL
+# enable_builder = false
 
 # Set to true if your validators only accept ofac-compliant blocks. 
 # This is a pubkey-specific setting so you could specify a list 
@@ -448,8 +449,8 @@ enable_ofac = false
 
 # Indicates how much ETH is allocated to secure a single slot.
 # It is in the unit of ETH and can either be 0 or between 0.01 to 1000 inclusive and no more than 2 decimal places.
-# REQUIRED
-collateral_per_slot = "0"
+# OPTIONAL
+# collateral_per_slot = "0"
 
 # Address of the fee recipient for receiving payout if ETHGas collateral contract (EthgasPool) address
 # is set as the fee recipient in the beacon node or validator client
@@ -458,8 +459,8 @@ collateral_per_slot = "0"
 # If `[[mux]]` is enabled, only the payout addresses of the validator keys specified in `[[mux]].validator_pubkeys` will be updated; 
 # other validator keys will retain their existing payout address
 # For ssv or obol validators, please check the config in the section below
-# REQUIRED
-payout_address = "0x..."
+# OPTIONAL
+# payout_address = "0x..."
 
 # A builder pubkey is required when enable_builder is true.
 # OPTIONAL
@@ -473,8 +474,9 @@ is_jwt_provided = false
 # Set to true if you want to query all your validator pubkeys regardless 
 # of standard or dvt type that have been registered on the ETHGas Exchange. 
 # A txt file will be created in ./records folder.
-# REQUIRED
-query_pubkey = true
+# Defaults to true when omitted; set to false to skip querying.
+# OPTIONAL
+# query_pubkey = true
 
 # Specify either eoa_signing_key/eoa_ledger_path or access_jwt & refresh_jwt depending on is_jwt_provided boolean value.
 # Alternatively, you can set EOA_SIGNING_KEY or ACCESS_JWT & REFRESH_JWT in .cb.env as env variables.

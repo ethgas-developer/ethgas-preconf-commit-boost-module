@@ -79,20 +79,20 @@ struct EthgasCommitService {
 struct ExtraConfig {
     exchange_api_base: String,
     entity_name: String,
-    overall_wait_interval_in_second: u32,
-    enable_pricer: bool,
+    overall_wait_interval_in_second: Option<u32>,
+    enable_pricer: Option<bool>,
     registration_mode: String,
     enable_registration: bool,
-    enable_builder: bool,
+    enable_builder: Option<bool>,
     enable_ofac: bool,
     enable_light_mode: Option<bool>,
     enable_user_lock: Option<bool>,
-    collateral_per_slot: String,
+    collateral_per_slot: Option<String>,
     // validator_mode: Option<u8>,
-    payout_address: alloy::primitives::Address,
+    payout_address: Option<alloy::primitives::Address>,
     builder_pubkey: Option<BlsPublicKey>,
     is_jwt_provided: bool,
-    query_pubkey: bool,
+    query_pubkey: Option<bool>,
     eoa_address: Option<alloy::primitives::Address>,
     eoa_signing_key: Option<B256>,
     eoa_ledger_path: Option<String>,
@@ -352,7 +352,7 @@ impl EthgasExchangeService {
 
 impl EthgasCommitService {
     pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        if self.config.extra.enable_builder && self.config.extra.builder_pubkey.is_none() {
+        if self.config.extra.enable_builder == Some(true) && self.config.extra.builder_pubkey.is_none() {
             return Err(std::io::Error::other(
                 "builder_pubkey is required when enable_builder = true",
             )
@@ -361,47 +361,52 @@ impl EthgasCommitService {
 
         let client = Client::new();
 
-        let mut exchange_api_url = Url::parse(&format!(
-            "{}{}{}",
-            self.config.extra.exchange_api_base,
-            "/api/v1/user/delegate/pricer?enable=",
-            self.config.extra.enable_pricer
-        ))?;
-        let mut res = client
-            .post(exchange_api_url.to_string())
-            .header("Authorization", format!("Bearer {}", self.access_jwt))
-            .header("content-type", "application/json")
-            .send()
-            .await?;
-        match res.json::<APIEnablePricerResponse>().await {
-            Ok(result) => match result.success {
-                true => {
-                    if self.config.extra.enable_pricer {
-                        info!("successfully enabled pricer");
-                    } else {
-                        info!("successfully disabled pricer");
+        let mut exchange_api_url: Url;
+        let mut res: Response;
+
+        if let Some(enable_pricer) = self.config.extra.enable_pricer {
+            exchange_api_url = Url::parse(&format!(
+                "{}{}{}",
+                self.config.extra.exchange_api_base,
+                "/api/v1/user/delegate/pricer?enable=",
+                enable_pricer
+            ))?;
+            res = client
+                .post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", self.access_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+            match res.json::<APIEnablePricerResponse>().await {
+                Ok(result) => match result.success {
+                    true => {
+                        if enable_pricer {
+                            info!("successfully enabled pricer");
+                        } else {
+                            info!("successfully disabled pricer");
+                        }
                     }
-                }
-                false => {
-                    if self.config.extra.enable_pricer {
-                        error!("failed to enable pricer");
-                    } else {
-                        error!("failed to disable pricer");
+                    false => {
+                        if enable_pricer {
+                            error!("failed to enable pricer");
+                        } else {
+                            error!("failed to disable pricer");
+                        }
                     }
+                },
+                Err(err) => {
+                    error!(?err, "failed to call pricer API");
                 }
-            },
-            Err(err) => {
-                error!(?err, "failed to call pricer API");
             }
         }
 
-        match &self.config.extra.builder_pubkey {
-            Some(builder_pubkey) => {
+        match (self.config.extra.enable_builder, &self.config.extra.builder_pubkey) {
+            (Some(enable_builder), Some(builder_pubkey)) => {
                 exchange_api_url = Url::parse(&format!(
                     "{}{}{}{}{}",
                     self.config.extra.exchange_api_base,
                     "/api/v1/user/delegate/builder?enable=",
-                    self.config.extra.enable_builder,
+                    enable_builder,
                     "&publicKeys=",
                     builder_pubkey
                 ))?;
@@ -414,14 +419,14 @@ impl EthgasCommitService {
                 match res.json::<APIEnableBuilderResponse>().await {
                     Ok(result) => match result.success {
                         true => {
-                            if self.config.extra.enable_builder {
+                            if enable_builder {
                                 info!("successfully delegated to builder {}", builder_pubkey);
                             } else {
                                 info!("successfully disabled builder delegation");
                             }
                         }
                         false => {
-                            if self.config.extra.enable_builder {
+                            if enable_builder {
                                 error!("failed to enable builder delegation");
                             } else {
                                 error!("failed to disable builder delegation");
@@ -433,39 +438,39 @@ impl EthgasCommitService {
                     }
                 }
             }
-            None => {
-                info!("builder delegation call is skipped");
-            }
+            _ => {}
         }
 
         let mut access_jwt = self.access_jwt.clone();
 
-        exchange_api_url = Url::parse(&format!(
-            "{}{}{}",
-            self.config.extra.exchange_api_base,
-            "/api/v1/user/collateralPerSlot?collateralPerSlot=",
-            self.config.extra.collateral_per_slot
-        ))?;
-        res = client
-            .post(exchange_api_url.to_string())
-            .header("Authorization", format!("Bearer {}", access_jwt))
-            .header("content-type", "application/json")
-            .send()
-            .await?;
-        match res.json::<APICollateralPerSlotResponse>().await {
-            Ok(result) => match result.success {
-                true => {
-                    info!(
-                        "successfully set collateral per slot to {} ETH",
-                        self.config.extra.collateral_per_slot
-                    );
+        if let Some(collateral_per_slot) = &self.config.extra.collateral_per_slot {
+            exchange_api_url = Url::parse(&format!(
+                "{}{}{}",
+                self.config.extra.exchange_api_base,
+                "/api/v1/user/collateralPerSlot?collateralPerSlot=",
+                collateral_per_slot
+            ))?;
+            res = client
+                .post(exchange_api_url.to_string())
+                .header("Authorization", format!("Bearer {}", access_jwt))
+                .header("content-type", "application/json")
+                .send()
+                .await?;
+            match res.json::<APICollateralPerSlotResponse>().await {
+                Ok(result) => match result.success {
+                    true => {
+                        info!(
+                            "successfully set collateral per slot to {} ETH",
+                            collateral_per_slot
+                        );
+                    }
+                    false => {
+                        error!("failed to set collateral per slot");
+                    }
+                },
+                Err(err) => {
+                    error!(?err, "failed to call validator collateral setting API");
                 }
-                false => {
-                    error!("failed to set collateral per slot");
-                }
-            },
-            Err(err) => {
-                error!(?err, "failed to call validator collateral setting API");
             }
         }
 
@@ -953,7 +958,6 @@ impl EthgasCommitService {
                 &self.config.extra.exchange_api_base,
                 self.config.extra.enable_registration,
                 &self.config.extra.registration_mode,
-                self.config.extra.enable_pricer,
                 self.config.extra.enable_ofac,
                 self.config.extra.enable_light_mode,
                 &self.config.extra.obol_node_operator_owner_mode,
@@ -1140,11 +1144,7 @@ impl EthgasCommitService {
                                                     .collect();
                                             if res_json_verify.success {
                                                 if !registered_keys.is_empty() {
-                                                    if self.config.extra.enable_pricer {
-                                                        info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
-                                                    } else {
-                                                        info!("successful registration, you can now sell preconfs on ETHGas");
-                                                    }
+                                                    info!("successful registration");
                                                     info!(registered_validators = ?registered_keys, number = registered_keys.len());
                                                     newly_registered_key_num +=
                                                         registered_keys.len();
@@ -1177,15 +1177,17 @@ impl EthgasCommitService {
                                                     .await?;
                                                 }
 
-                                                update_payout_address(
-                                                    &client,
-                                                    &self.config.extra.registration_mode,
-                                                    &self.config.extra.exchange_api_base,
-                                                    &access_jwt,
-                                                    self.config.extra.payout_address,
-                                                    &pubkeys_str,
-                                                )
-                                                .await?;
+                                                if let Some(payout_address) = self.config.extra.payout_address {
+                                                    update_payout_address(
+                                                        &client,
+                                                        &self.config.extra.registration_mode,
+                                                        &self.config.extra.exchange_api_base,
+                                                        &access_jwt,
+                                                        payout_address,
+                                                        &pubkeys_str,
+                                                    )
+                                                    .await?;
+                                                }
                                             } else {
                                                 let err_msg = res_json_verify
                                                     .error_msg_key
@@ -1263,7 +1265,7 @@ impl EthgasCommitService {
             .await?;
         }
 
-        if self.config.extra.query_pubkey {
+        if self.config.extra.query_pubkey.unwrap_or(true) {
             info!("querying all your registered pubkeys...");
             get_registered_all_pubkeys(
                 &client,
@@ -1305,11 +1307,7 @@ impl EthgasCommitService {
                             None => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
                             Some(ref vec) if vec.is_empty() => warn!("no pubkey was registered. those pubkeys may not be found in any ssv cluster"),
                             Some(_) => {
-                                if self.config.extra.enable_pricer {
-                                    info!("successful registration, the default pricer can now sell preconfs on ETHGas on behalf of you");
-                                } else {
-                                    info!("successful registration, you can now sell preconfs on ETHGas");
-                                }
+                                info!("successful registration");
                                 let result_data_validators = result.data.validators.unwrap_or_default();
                                 info!(registered_validators = ?result_data_validators, number = result_data_validators.len());
                                 let validators_str = result_data_validators
@@ -1444,7 +1442,7 @@ async fn main() -> Result<()> {
                     MetricsProvider::load_and_run(config.chain, MY_CUSTOM_REGISTRY.clone())?;
                 }
 
-                overall_wait_interval_in_second = config.extra.overall_wait_interval_in_second;
+                overall_wait_interval_in_second = config.extra.overall_wait_interval_in_second.unwrap_or(0);
 
                 info!(
                     module_id = %config.id,
@@ -1461,15 +1459,17 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                let collateral_per_slot: Decimal =
-                    Decimal::from_str(&config.extra.collateral_per_slot)?;
-                if collateral_per_slot != Decimal::new(0, 0)
-                    && (collateral_per_slot > Decimal::new(1000, 0)
-                        || collateral_per_slot < Decimal::new(1, 2)
-                        || collateral_per_slot.scale() > 2)
-                {
-                    error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
-                    return Err(std::io::Error::other("invalid collateral_per_slot").into());
+                if let Some(collateral_per_slot) = &config.extra.collateral_per_slot {
+                    let collateral_per_slot: Decimal =
+                        Decimal::from_str(collateral_per_slot)?;
+                    if collateral_per_slot != Decimal::new(0, 0)
+                        && (collateral_per_slot > Decimal::new(1000, 0)
+                            || collateral_per_slot < Decimal::new(1, 2)
+                            || collateral_per_slot.scale() > 2)
+                    {
+                        error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
+                        return Err(std::io::Error::other("invalid collateral_per_slot").into());
+                    }
                 }
 
                 let chain_id = if config.extra.exchange_api_base.contains("hoodi") {
