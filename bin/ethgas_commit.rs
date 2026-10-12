@@ -122,7 +122,7 @@ struct RegisteredInfo {
 
 #[derive(Debug, Deserialize)]
 struct APILoginResponse {
-    // success: bool,
+    success: bool,
     data: APILoginResponseData,
 }
 
@@ -285,6 +285,9 @@ impl EthgasExchangeService {
             .await?;
 
         let res_json_login = res.json::<APILoginResponse>().await?;
+        if !res_json_login.success {
+            return Err(eyre::eyre!("login challenge was rejected"));
+        }
 
         let eip712_message: Eip712Message =
             serde_json::from_str(&res_json_login.data.eip712_message)
@@ -318,6 +321,9 @@ impl EthgasExchangeService {
         }
         let res_json_verify: APILoginVerifyResponse =
             parse_sensitive_json(res, "login verification").await?;
+        if !res_json_verify.success || res_json_verify.data.access_token.token.is_empty() || refresh_jwt.is_empty() {
+            return Err(eyre::eyre!("login verification failed or returned empty tokens"));
+        }
         info!("successfully obtained access jwt from the exchange");
         exchange_api_url = Url::parse(&format!(
             "{}{}",
@@ -846,7 +852,7 @@ impl EthgasCommitService {
                                     }
                                 }
                             Err(err) => {
-                                error!(?err, "failed to call ssv operator verify API");
+                                return Err(err.into());
                             }
                         }
                     }
@@ -1041,38 +1047,7 @@ impl EthgasCommitService {
                                 for (counter, (pubkey_chunk, sig_chunk)) in
                                     pubkeys.chunks(100).zip(signatures.chunks(100)).enumerate()
                                 {
-                                    if counter % 1000 == 0 && counter != 0 {
-                                        exchange_api_url = Url::parse(&format!(
-                                            "{}{}",
-                                            self.config.extra.exchange_api_base,
-                                            "/api/v1/user/login/refresh"
-                                        ))?;
-                                        res = client
-                                            .post(exchange_api_url.to_string())
-                                            .header("User-Agent", "cb_ethgas_commit")
-                                            .header(
-                                                "Authorization",
-                                                format!("Bearer {}", access_jwt),
-                                            )
-                                            .header("content-type", "application/json")
-                                            .query(&[("refreshToken", self.refresh_jwt.as_str())])
-                                            .send()
-                                            .await
-                                            .map_err(|err| err.without_url())?;
-                                        match parse_sensitive_json::<APILoginVerifyResponse>(res, "jwt refresh").await {
-                                            Ok(res_json) => {
-                                                if res_json.success {
-                                                    info!("successfully refreshed access jwt");
-                                                    access_jwt = res_json.data.access_token.token;
-                                                } else {
-                                                    error!("failed to refresh access jwt");
-                                                }
-                                            }
-                                            Err(err) => {
-                                                error!(?err, "failed to call jwt refresh API");
-                                            }
-                                        }
-                                    }
+                                    self.refresh_access_jwt(&client, &mut access_jwt, counter).await?;
 
                                     let pubkeys_str = pubkey_chunk
                                         .iter()
@@ -1292,6 +1267,42 @@ impl EthgasCommitService {
         Ok(())
     }
 
+    async fn refresh_access_jwt(&self, client: &Client, access_jwt: &mut String, counter: usize) -> Result<()> {
+        if counter % 1000 == 0 && counter != 0 {
+            let exchange_api_url = Url::parse(&format!(
+                "{}{}",
+                self.config.extra.exchange_api_base,
+                "/api/v1/user/login/refresh"
+            ))?;
+            let res = client
+                .post(exchange_api_url.to_string())
+                .header("User-Agent", "cb_ethgas_commit")
+                .header(
+                    "Authorization",
+                    format!("Bearer {}", access_jwt),
+                )
+                .header("content-type", "application/json")
+                .query(&[("refreshToken", self.refresh_jwt.as_str())])
+                .send()
+                .await
+                .map_err(|err| err.without_url())?;
+            match parse_sensitive_json::<APILoginVerifyResponse>(res, "jwt refresh").await {
+                Ok(res_json) => {
+                    if res_json.success && !res_json.data.access_token.token.is_empty() {
+                        info!("successfully refreshed access jwt");
+                        *access_jwt = res_json.data.access_token.token;
+                    } else {
+                        error!("failed to refresh access jwt");
+                    }
+                }
+                Err(err) => {
+                    error!(?err, "failed to call jwt refresh API");
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn ssv_validator_register_response(
         &self,
         res: Response,
@@ -1401,6 +1412,10 @@ fn load_module_signing_id() -> Result<B256> {
     let module_id =
         env::var("CB_MODULE_ID").map_err(|_| eyre::eyre!("CB_MODULE_ID env var not set"))?;
 
+    read_module_signing_id(&config_path, &module_id)
+}
+
+fn read_module_signing_id(config_path: &str, module_id: &str) -> Result<B256> {
     #[derive(Deserialize)]
     struct ModuleSigningId {
         id: String,
@@ -1411,7 +1426,7 @@ fn load_module_signing_id() -> Result<B256> {
         modules: Vec<ModuleSigningId>,
     }
 
-    let contents = std::fs::read_to_string(&config_path)
+    let contents = std::fs::read_to_string(config_path)
         .map_err(|e| eyre::eyre!("failed to read config file {config_path}: {e}"))?;
     let parsed: ConfigSigningIds = toml::from_str(&contents)?;
     parsed
@@ -1420,6 +1435,21 @@ fn load_module_signing_id() -> Result<B256> {
         .find(|m| m.id == module_id)
         .map(|m| m.signing_id)
         .ok_or_else(|| eyre::eyre!("no module with id {module_id} found in {config_path}"))
+}
+
+fn validate_collateral_per_slot(collateral_per_slot: Option<&str>) -> Result<()> {
+    if let Some(collateral_per_slot) = collateral_per_slot {
+        let collateral_per_slot: Decimal = Decimal::from_str(collateral_per_slot)?;
+        if collateral_per_slot != Decimal::new(0, 0)
+            && (collateral_per_slot > Decimal::new(1000, 0)
+                || collateral_per_slot < Decimal::new(1, 2)
+                || collateral_per_slot.scale() > 2)
+        {
+            error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
+            return Err(std::io::Error::other("invalid collateral_per_slot").into());
+        }
+    }
+    Ok(())
 }
 
 #[tokio::main]
@@ -1459,18 +1489,7 @@ async fn main() -> Result<()> {
                     }
                 };
 
-                if let Some(collateral_per_slot) = &config.extra.collateral_per_slot {
-                    let collateral_per_slot: Decimal =
-                        Decimal::from_str(collateral_per_slot)?;
-                    if collateral_per_slot != Decimal::new(0, 0)
-                        && (collateral_per_slot > Decimal::new(1000, 0)
-                            || collateral_per_slot < Decimal::new(1, 2)
-                            || collateral_per_slot.scale() > 2)
-                    {
-                        error!("collateral_per_slot must be 0 or between 0.01 to 1000 ETH inclusive & no more than 2 decimal place");
-                        return Err(std::io::Error::other("invalid collateral_per_slot").into());
-                    }
-                }
+                validate_collateral_per_slot(config.extra.collateral_per_slot.as_deref())?;
 
                 let chain_id = if config.extra.exchange_api_base.contains("hoodi") {
                     560048
@@ -1628,3 +1647,7 @@ async fn main() -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/commit.rs"]
+mod tests;

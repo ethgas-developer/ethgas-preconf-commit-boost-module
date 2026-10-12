@@ -1,23 +1,20 @@
 use alloy::{
     contract::{ContractInstance, Interface},
     dyn_abi::DynSolValue,
-    hex::encode,
     network::EthereumWallet,
     primitives::{B256, U256},
     providers::ProviderBuilder,
-    signers::{local::PrivateKeySigner, Signer},
-    sol,
-    sol_types::{eip712_domain, SolStruct},
+    signers::local::PrivateKeySigner,
 };
 use chrono::DateTime;
 use commit_boost::prelude::*;
-use ethgas_commit::utils::parse_sensitive_json;
+use ethgas_commit::{login_types::EoaSigner, utils::{generate_eip712_signature, parse_sensitive_json}};
 use eyre::Result;
 use lazy_static::lazy_static;
 use prometheus::{IntCounter, Registry};
 use reqwest::{Client, Url};
 use rust_decimal::Decimal;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::{env, error::Error, str::FromStr, sync::Arc, time::Duration};
 use tokio::time::{sleep, timeout};
 use tokio_retry::{strategy::FixedInterval, Retry};
@@ -40,6 +37,7 @@ lazy_static! {
 struct EthgasExchangeService {
     exchange_api_base: String,
     eoa_signing_key: B256,
+    chain_id: u64,
 }
 
 struct EthgasDepositService {
@@ -66,40 +64,8 @@ struct ExtraConfig {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Domain {
-    name: String,
-    version: String,
-    chain_id: u64,
-    verifying_contract: alloy::primitives::Address,
-}
-
-#[derive(Debug, Deserialize)]
-struct Message {
-    hash: String,
-    message: String,
-    domain: String,
-}
-
-sol! {
-    #[allow(missing_docs)]
-    #[derive(Serialize)]
-    struct data {
-        string hash;
-        string message;
-        string domain;
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct Eip712Message {
-    message: Message,
-    domain: Domain,
-}
-
-#[derive(Debug, Deserialize)]
 struct APILoginResponse {
-    // success: bool,
+    success: bool,
     data: APILoginResponseData,
 }
 
@@ -111,7 +77,7 @@ struct APILoginResponseData {
 
 #[derive(Debug, Deserialize)]
 struct APILoginVerifyResponse {
-    // success: bool,
+    success: bool,
     data: APILoginVerifyResponseData,
 }
 
@@ -204,25 +170,16 @@ impl EthgasExchangeService {
 
         let res_json_login = res.json::<APILoginResponse>().await?;
 
-        let eip712_message: Eip712Message =
-            serde_json::from_str(&res_json_login.data.eip712_message)
-                .map_err(|e| eyre::eyre!("Failed to parse EIP712 message: {}", e))?;
-        let eip712_domain_from_api = eip712_message.domain;
-        let eip712_sub_message = eip712_message.message;
-        let domain = eip712_domain! {
-            name: eip712_domain_from_api.name,
-            version: eip712_domain_from_api.version,
-            chain_id: eip712_domain_from_api.chain_id,
-            verifying_contract: eip712_domain_from_api.verifying_contract,
-        };
-        let message = data {
-            hash: eip712_sub_message.hash.clone(),
-            message: eip712_sub_message.message,
-            domain: eip712_sub_message.domain,
-        };
-        let hash = message.eip712_signing_hash(&domain);
-        let signature = signer.clone().sign_hash(&hash).await?;
-        let signature_hex = encode(signature.as_bytes());
+        if !res_json_login.success {
+            return Err(eyre::eyre!("login challenge was rejected"));
+        }
+        let eip712_message: ethgas_commit::login_types::Eip712Message =
+            serde_json::from_str(&res_json_login.data.eip712_message)?;
+        let signature_hex = generate_eip712_signature(
+            &res_json_login.data.eip712_message,
+            &EoaSigner::PrivateKey(signer.clone()),
+            self.chain_id,
+        ).await?;
         exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/login/verify"
@@ -231,13 +188,16 @@ impl EthgasExchangeService {
             .post(exchange_api_url.to_string())
             .header("User-Agent", "cb_ethgas_deposit")
             .query(&[("addr", signer.clone().address())])
-            .query(&[("nonceHash", eip712_sub_message.hash)])
+            .query(&[("nonceHash", eip712_message.message.hash)])
             .query(&[("signature", signature_hex)])
             .send()
             .await
             .map_err(|err| err.without_url())?;
         let res_json_verify: APILoginVerifyResponse =
             parse_sensitive_json(res, "login verification").await?;
+        if !res_json_verify.success || res_json_verify.data.access_token.token.is_empty() {
+            return Err(eyre::eyre!("login verification failed or returned an empty access token"));
+        }
         info!("successfully obtained access jwt from the exchange");
         Ok(res_json_verify.data.access_token.token)
         // info!("API Response as JSON: {}", res.json::<Value>().await?);
@@ -275,7 +235,8 @@ impl EthgasDepositService {
         let abi = serde_json::from_str(ABI)?;
         let contract = ContractInstance::new(ethgas_pool_addr, provider, Interface::new(abi));
         let token_transfers_value = DynSolValue::Array(Vec::new());
-        let wei_amount_decimal = (amount * Decimal::from_str("1000000000000000000")?).round_dp(0);
+        let wei_amount_decimal = amount.checked_mul(Decimal::from_str("1000000000000000000")?)
+            .ok_or_else(|| std::io::Error::other("deposit amount is too large"))?.round_dp(0);
         let pending_transaction_builder = contract
             .function("deposit", &[token_transfers_value])?
             .value(U256::from_str(&wei_amount_decimal.to_string())?)
@@ -285,13 +246,7 @@ impl EthgasDepositService {
             "Pending transaction hash: {:?}",
             pending_transaction_builder.tx_hash()
         );
-        if timeout(Duration::from_secs(60), pending_transaction_builder.watch())
-            .await
-            .is_err()
-        {
-            error!("Please check the status of the on-chain deposit by searching the pending transaction hash on Etherscan and then visit https://app.ethgas.com/my-portfolio/accounts to transfer your fund from current account to trading account");
-            return Err(std::io::Error::other("On-chain deposit timeout").into());
-        }
+        confirm_deposit_receipt(pending_transaction_builder.get_receipt()).await?;
         info!(
             "{} ETH deposit transaction is successfully included in the block",
             amount
@@ -360,11 +315,12 @@ impl EthgasDepositService {
                     {
                         let datetime =
                             DateTime::from_timestamp(latest_deposit.create_date / 1000, 0)
-                                .expect("invalid timestamp");
+                                .ok_or_else(|| std::io::Error::other("invalid deposit timestamp"))?;
                         let latest_deposit_datetime =
                             datetime.format("%Y-%m-%d %H:%M:%S").to_string();
                         let deposit_in_eth =
-                            Decimal::from_i128_with_scale(latest_deposit.deposits[0].q, 0)
+                            Decimal::try_from_i128_with_scale(latest_deposit.deposits.first()
+                                .ok_or_else(|| std::io::Error::other("deposit quantities are empty"))?.q, 0)?
                                 / Decimal::from_str("1000000000000000000")?;
                         info!(
                             "latest deposit found at {}UTC with {:?} ETH",
@@ -383,8 +339,8 @@ impl EthgasDepositService {
                 error!(?err, "failed to call deposits history API");
             }
         }
-        let mut current_ac_id: u32 = 0;
-        let mut trading_ac_id: u32 = 0;
+        let current_ac_id: u32;
+        let trading_ac_id: u32;
         exchange_api_url = Url::parse(&format!(
             "{}{}",
             self.exchange_api_base, "/api/v1/user/accounts"
@@ -406,7 +362,7 @@ impl EthgasDepositService {
                     {
                         current_ac_id = _current_ac_id;
                     } else {
-                        error!("No type 1 account found!");
+                        return Err(std::io::Error::other("No type 1 account found").into());
                     }
                     if let Some(_trading_ac_id) = result
                         .data
@@ -417,7 +373,7 @@ impl EthgasDepositService {
                     {
                         trading_ac_id = _trading_ac_id;
                     } else {
-                        error!("No type 2 account found!");
+                        return Err(std::io::Error::other("No type 2 account found").into());
                     }
                 }
                 false => {
@@ -462,6 +418,18 @@ impl EthgasDepositService {
     }
 }
 
+async fn confirm_deposit_receipt(
+    receipt: impl std::future::Future<Output = Result<alloy::rpc::types::TransactionReceipt, alloy::providers::PendingTransactionError>>,
+) -> Result<(), Box<dyn Error>> {
+    let receipt = timeout(Duration::from_secs(60), receipt)
+        .await
+        .map_err(|_| std::io::Error::other("On-chain deposit timeout"))??;
+    if !receipt.status() {
+        return Err(std::io::Error::other("On-chain deposit reverted").into());
+    }
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     color_eyre::install()?;
@@ -491,7 +459,7 @@ async fn main() -> Result<()> {
             };
 
             let rpc_url = match Arc::try_unwrap(pbs_config.0.pbs_config) {
-                Ok(pbs_config) => pbs_config.rpc_url.expect("Failed to get RPC URL"),
+                Ok(pbs_config) => pbs_config.rpc_url.ok_or_else(|| eyre::eyre!("Failed to get RPC URL"))?,
                 Err(_arc) => {
                     error!("Failed to get RPC URL");
                     return Err(std::io::Error::other("Failed to get RPC URL").into());
@@ -508,6 +476,7 @@ async fn main() -> Result<()> {
             }
 
             let exchange_service = EthgasExchangeService {
+                chain_id: config.chain.id().to::<u64>(),
                 exchange_api_base: config.extra.exchange_api_base.clone(),
                 eoa_signing_key: match config.extra.eoa_signing_key {
                     Some(eoa) => eoa,
@@ -530,6 +499,7 @@ async fn main() -> Result<()> {
                 let service = EthgasExchangeService {
                     exchange_api_base: exchange_service.exchange_api_base.clone(),
                     eoa_signing_key: exchange_service.eoa_signing_key,
+                    chain_id: exchange_service.chain_id,
                 };
                 service.login().await.map_err(|err| {
                     error!(?err, "Service failed");
@@ -562,3 +532,7 @@ async fn main() -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/deposit.rs"]
+mod tests;

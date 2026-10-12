@@ -151,7 +151,7 @@ pub async fn register_obol_keys(
                                         std::fs::read_to_string(&keystore.password_path)?;
                                     let private_key = eth_keystore::decrypt_key(
                                         &keystore.keystore_path,
-                                        password,
+                                        password.trim(),
                                     )
                                     .map_err(|e| eyre::eyre!("Failed to read keystore: {}", e))?;
                                     let signer = PrivateKeySigner::from_slice(&private_key)
@@ -186,13 +186,15 @@ pub async fn register_obol_keys(
                                             keystore_paths.iter().zip(password_paths.iter())
                                         {
                                             let password = std::fs::read_to_string(password_path)?;
-                                            let signer = PrivateKeySigner::decrypt_keystore(
+                                            let private_key = eth_keystore::decrypt_key(
                                                 keystore_path,
                                                 password.trim(),
                                             )
-                                            .map_err(|e| {
-                                                eyre::eyre!("Failed to create signer: {}", e)
-                                            })?;
+                                            .map_err(|e| eyre::eyre!("Failed to read keystore: {}", e))?;
+                                            let signer = PrivateKeySigner::from_slice(&private_key)
+                                                .map_err(|e| {
+                                                    eyre::eyre!("Failed to create signer: {}", e)
+                                                })?;
                                             operator_signers.push(EoaSigner::PrivateKey(signer));
                                         }
                                         operator_signers
@@ -333,14 +335,14 @@ pub async fn register_obol_keys(
                         info!("successfully registered obol node operator owner address");
                     }
                     false => {
-                        error!(
+                        return Err(eyre::eyre!(
                             "failed to register obol node operator owner address: {}",
                             result.error_msg_key.unwrap_or_default()
-                        );
+                        ).into());
                     }
                 },
                 Err(err) => {
-                    error!(?err, "failed to call obol operator verify API");
+                    return Err(err.into());
                 }
             }
         }

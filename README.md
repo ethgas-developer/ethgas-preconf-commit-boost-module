@@ -27,6 +27,33 @@ First and foremost, we would like to give a big shout out to the Commit-Boost te
 - [Node operators - Detailed Example Config - Hoodi](./config.example.hoodi.toml)
 - [Additional Configuration Notes](./extra-config-notes.md)
 
+## Tests and coverage
+
+The suite uses isolated local HTTP fixtures, temporary files, subprocess environments,
+and an Anvil EVM. It never requires production credentials or a live network.
+Install Anvil (Foundry v1.8.5; set `ANVIL_BIN` if it is not on `PATH`) and run:
+
+```sh
+cargo test --all-targets --locked
+```
+
+For the same coverage gate used by CI:
+
+```sh
+rustup component add llvm-tools-preview
+cargo install cargo-llvm-cov --version 0.9.1 --locked
+./scripts/test-coverage.sh
+```
+
+CI uses Rust 1.97.1 and requires at least **95% lines, regions, and functions**
+across all production sources in `src/` and `bin/`. Only files under `tests/`
+are excluded. Reports are written to `target/coverage.json` and
+`target/coverage/html/index.html`. Coverage percentages do not measure assertion
+quality or guarantee security; the suite also checks independent EIP-712/BLS
+encodings, replay boundaries, credential redaction, failed registration side
+effects, exact deposit value/calldata, receipts, and invalid configuration.
+Physical Ledger interaction requires a separate hardware check.
+
 ## Audit
 
 - The module has been audited by [Sigma Prime](https://sigmaprime.io). Find the report [here](https://github.com/ethgas-developer/ethgas-audit).

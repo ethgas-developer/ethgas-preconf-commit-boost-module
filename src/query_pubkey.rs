@@ -87,6 +87,15 @@ pub async fn get_registered_all_pubkeys(
     exchange_api_base: String,
     access_jwt: &str,
 ) -> Result<(), Box<dyn Error>> {
+    get_registered_all_pubkeys_to(client, exchange_api_base, access_jwt, std::path::Path::new(".")).await
+}
+
+pub(crate) async fn get_registered_all_pubkeys_to(
+    client: &Client,
+    exchange_api_base: String,
+    access_jwt: &str,
+    output_dir: &std::path::Path,
+) -> Result<(), Box<dyn Error>> {
     let exchange_api_url = Url::parse(&format!(
         "{}{}",
         exchange_api_base, "/api/v1/user/validators"
@@ -108,7 +117,7 @@ pub async fn get_registered_all_pubkeys(
                     let now = Local::now();
                     let timestamp = now.format("%Y%m%d_%H%M%S").to_string();
                     let filename = format!("registered_all_pubkeys_{}.txt", timestamp);
-                    let mut file = File::create(&filename)?;
+                    let mut file = File::create(output_dir.join(&filename))?;
                     for key in pubkeys {
                         writeln!(file, "{}", key)?;
                     }
@@ -136,6 +145,15 @@ pub async fn get_registered_ssv_pubkeys(
     client: &Client,
     exchange_api_base: String,
     access_jwt: &str,
+) -> Result<(), Box<dyn Error>> {
+    get_registered_ssv_pubkeys_to(client, exchange_api_base, access_jwt, std::path::Path::new(".")).await
+}
+
+pub(crate) async fn get_registered_ssv_pubkeys_to(
+    client: &Client,
+    exchange_api_base: String,
+    access_jwt: &str,
+    output_dir: &std::path::Path,
 ) -> Result<(), Box<dyn Error>> {
     let mut exchange_api_url = Url::parse(&format!(
         "{}{}",
@@ -179,7 +197,7 @@ pub async fn get_registered_ssv_pubkeys(
                                             "registered_ssv_operator_owner_{}_ssv_pubkeys_{}.txt",
                                             owner_address, timestamp
                                         );
-                                        let mut file = File::create(&filename)?;
+                                        let mut file = File::create(output_dir.join(&filename))?;
                                         for key in res_json.data.validators {
                                             writeln!(file, "{}", key)?;
                                         }
@@ -212,6 +230,15 @@ pub async fn get_registered_obol_pubkeys(
     client: &Client,
     exchange_api_base: String,
     access_jwt: &str,
+) -> Result<(), Box<dyn Error>> {
+    get_registered_obol_pubkeys_to(client, exchange_api_base, access_jwt, std::path::Path::new(".")).await
+}
+
+pub(crate) async fn get_registered_obol_pubkeys_to(
+    client: &Client,
+    exchange_api_base: String,
+    access_jwt: &str,
+    output_dir: &std::path::Path,
 ) -> Result<(), Box<dyn Error>> {
     let mut exchange_api_url = Url::parse(&format!(
         "{}{}",
@@ -256,7 +283,7 @@ pub async fn get_registered_obol_pubkeys(
                                             "registered_obol_operator_owner_{}_obol_pubkeys_{}.txt",
                                             owner_address, timestamp
                                         );
-                                        let mut file = File::create(&filename)?;
+                                        let mut file = File::create(output_dir.join(&filename))?;
                                         for key in res_json.data.validators {
                                             writeln!(file, "{}", key)?;
                                         }

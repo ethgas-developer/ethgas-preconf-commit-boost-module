@@ -1,0 +1,40 @@
+name: Tests and Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install native build dependencies
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libudev-dev libusb-1.0-0-dev
+      - name: Install Rust and LLVM coverage tools
+        run: |
+          rustup toolchain install 1.97.1 --profile minimal --component llvm-tools-preview
+          rustup override set 1.97.1
+          cargo install cargo-llvm-cov --version 0.9.1 --locked
+      - name: Install local EVM
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.8.5
+          cache: false
+      - name: Run all targets and enforce 95 percent coverage
+        run: ./scripts/test-coverage.sh
+      - name: Upload coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: |
+            target/coverage.json
+            target/coverage/html
+          if-no-files-found: ignore
