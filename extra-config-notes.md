@@ -13,7 +13,7 @@
   - set your `entity_name`
   - set `registration_mode` to be either `standard` for the most typical validators, `ssv` for SSV validators, `obol` for Obol validators or `skipped` to skip registration
   - set `enable_registration = true` to register validators in ETHGas, set `enable_registration = false` to de-register validators
-  - When `registration_mode = standard`, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. To enable PBS multiplexer, set `registration_mode = standard-mux` and set the `id` of `[[mux]]` or `[[mux.relays]]` to contain `ethgas` wording under `[[mux]]` section, then only validator public keys of `validator_pubkeys` or `loader` will be registered.
+  - When `registration_mode = standard`, all validator public keys inside keys directory or file will be registered in ETHGas Exchange. To enable PBS multiplexer, set `registration_mode = standard-mux` and set the `id` of `[[mux]]` to contain `ethgas` (case-insensitive), then only validator public keys of `validator_pubkeys` or `loader` in matching muxes will be registered. Relay IDs do not affect this selection. The same selection applies to de-registration when `enable_registration = false`.
   - for SSV validators, you need to prove your ownership to any one of the SSV node operator.
     - set `ssv_node_operator_owner_mode` to be either `key`, `keystore`, `ledger` or `tx`
     - For the `key` mode, set one or multiple private keys under `ssv_node_operator_owner_signing_keys` array

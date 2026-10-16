@@ -1595,7 +1595,7 @@ async fn main() -> Result<()> {
                         mux_map
                             .iter()
                             .filter_map(|(key, value)| {
-                                let matches = value.id.contains("ethgas") || value.relays.iter().any(|relay| relay.id.contains("ethgas"));
+                                let matches = value.id.to_ascii_lowercase().contains("ethgas");
 
                                 if matches {
                                     let pk = BlsPublicKey::from(key.to_owned());

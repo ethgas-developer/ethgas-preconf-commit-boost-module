@@ -338,7 +338,7 @@ entity_name = "..." # a41, bcw, blockdaemon, chorus_one, coinbase, everstake, fi
 # When registration_mode = standard, all validator public keys inside the
 # keys directory or file will be registered in the ETHGas Exchange. 
 # To enable PBS multiplexer, set registration_mode = standard-mux 
-# and set the id of [[mux.relays]] to contain ethgas wording under [[mux]] section, 
+# and set the id of [[mux]] to contain ethgas (case-insensitive),
 # then only validator public keys of validator_pubkeys or loader will be registered.
 # REQUIRED
 registration_mode = "standard"

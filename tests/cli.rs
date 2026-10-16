@@ -484,47 +484,65 @@ async fn cli_retries_login_failures_and_rejects_invalid_pbs_configuration() {
 }
 
 #[tokio::test]
-async fn mux_registration_selects_only_ethgas_mux_and_relay_keys() {
-    let server = Server::new().await;
-    let dir = tempfile::tempdir().unwrap();
-    let keys = pubkeys(3);
-    let mut value = module(&server.url);
-    value["registration_mode"] = json!("standard-mux");
-    value["enable_registration"] = json!(false);
-    let config = write_config(dir.path(), &server.url, value);
-    let mut document: toml::Value = std::fs::read_to_string(&config).unwrap().parse().unwrap();
-    let muxes = json!([
-        {"id": "ethgas_mux", "validator_pubkeys": [keys[0]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
-        {"id": "other_mux", "validator_pubkeys": [keys[1]], "relays": [{"id": "ethgas_relay", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
-        {"id": "unrelated", "validator_pubkeys": [keys[2]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]}
-    ]);
-    document
-        .as_table_mut()
-        .unwrap()
-        .insert("mux".into(), toml::Value::try_from(muxes).unwrap());
-    std::fs::write(&config, toml::to_string(&document).unwrap()).unwrap();
-    let result = output(&mut command(
-        env!("CARGO_BIN_EXE_ethgas_commit"),
-        dir.path(),
-        &config,
-    ))
-    .await;
-    assert!(
-        result.status.success(),
-        "{} {}",
-        String::from_utf8_lossy(&result.stdout),
-        String::from_utf8_lossy(&result.stderr)
-    );
-    let calls = server.calls("/api/v1/validator/deregister");
-    assert_eq!(calls.len(), 1);
-    let selected: std::collections::HashSet<_> = calls[0].form()["publicKeys"]
-        .split(',')
-        .map(str::to_owned)
-        .collect();
-    assert_eq!(
-        selected,
-        keys[..2].iter().map(ToString::to_string).collect()
-    );
+async fn mux_registration_selects_only_ethgas_mux_keys() {
+    for register in [true, false] {
+        let server = Server::new().await;
+        let dir = tempfile::tempdir().unwrap();
+        let keys = pubkeys(5);
+        let mut value = module(&server.url);
+        value["registration_mode"] = json!("standard-mux");
+        value["enable_registration"] = json!(register);
+        let config = write_config(dir.path(), &server.url, value);
+        let mut document: toml::Value = std::fs::read_to_string(&config).unwrap().parse().unwrap();
+        let muxes = json!([
+            {"id": "ethgas_mux", "validator_pubkeys": [keys[0]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
+            {"id": "other_mux", "validator_pubkeys": [keys[1]], "relays": [{"id": "ethgas_relay", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
+            {"id": "unrelated", "validator_pubkeys": [keys[2]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
+            {"id": "ETHGAS_MUX", "validator_pubkeys": [keys[3]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]},
+            {"id": "custom_EtHgAs_mux", "validator_pubkeys": [keys[4]], "relays": [{"id": "other", "url": format!("http://{}@127.0.0.1:1", keys[0])}]}
+        ]);
+        document
+            .as_table_mut()
+            .unwrap()
+            .insert("mux".into(), toml::Value::try_from(muxes).unwrap());
+        std::fs::write(&config, toml::to_string(&document).unwrap()).unwrap();
+        let mut cmd = command(env!("CARGO_BIN_EXE_ethgas_commit"), dir.path(), &config);
+        cmd.env("CB_SIGNER_URL", &server.url);
+        let result = output(&mut cmd).await;
+        assert!(
+            result.status.success(),
+            "{} {}",
+            String::from_utf8_lossy(&result.stdout),
+            String::from_utf8_lossy(&result.stderr)
+        );
+        let path = if register {
+            "/api/v1/validator/verify/batch2"
+        } else {
+            "/api/v1/validator/deregister"
+        };
+        let calls = server.calls(path);
+        assert_eq!(calls.len(), 1);
+        let selected: std::collections::HashSet<_> = calls[0].form()["publicKeys"]
+            .split(',')
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(
+            selected,
+            [0, 3, 4].iter().map(|&index| keys[index].to_string()).collect()
+        );
+        let signatures = server.calls("/signer/v1/request_signature/bls");
+        assert_eq!(signatures.len(), if register { selected.len() } else { 0 });
+        if register {
+            let signed: std::collections::HashSet<_> = signatures
+                .iter()
+                .map(|request| {
+                    let body: Value = serde_json::from_str(&request.body).unwrap();
+                    body["pubkey"].as_str().unwrap().to_owned()
+                })
+                .collect();
+            assert_eq!(signed, selected);
+        }
+    }
 }
 
 #[tokio::test]
