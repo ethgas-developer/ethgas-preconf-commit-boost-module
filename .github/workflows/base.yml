@@ -15,34 +15,77 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
+    - name: Verify action runtime security
+      id: node_security
+      shell: bash
+      # Keep in sync with test.yml. A local action would require checkout first.
+      # Pinned actions must use node24 and have no runs.pre hook.
+      run: |
+        set -euo pipefail
+        worker="$(readlink -f "/proc/$PPID/exe")"
+        if [[ "$worker" != */bin/Runner.Worker ]]; then
+          echo "::error::Cannot locate the active runner's embedded Node.js runtime."
+          exit 1
+        fi
+        node="${worker%/bin/Runner.Worker}/externals/node24/bin/node"
+        if [[ ! -x "$node" ]]; then
+          echo "::error::The active runner has no executable Node.js 24 runtime."
+          exit 1
+        fi
+        version="$("$node" --version)"
+        if [[ ! "$version" =~ ^v24\.([0-9]+)\.([0-9]+)$ ]] ||
+           (( BASH_REMATCH[1] < 22 || (BASH_REMATCH[1] == 22 && BASH_REMATCH[2] < 1) )); then
+          echo "::error::The action runner uses Node.js $version; update its embedded runtime to Node.js 24.22.1 or newer on the 24.x line."
+          exit 1
+        fi
+        "$node" --input-type=commonjs <<'NODE'
+        const { X509Certificate, createHash } = require('node:crypto');
+        const { rootCertificates } = require('node:tls');
+        const distrusted = new Set([
+          'bd153ed7b0434f6886b17bce8bbe84ed340c7132d702a8f4fa318f756ecbd6f3',
+          'c619e4780ed8e0abeda24ad732567de4383a7ea941338f6d1a7d1b49ac792fe9',
+          '8d417db2dd8bf5e3084d1e3f196d583849d81bdd4c00c70b9d39369e96b8c782',
+        ]);
+        for (const pem of rootCertificates) {
+          const certificate = new X509Certificate(pem);
+          const spki = certificate.publicKey.export({ type: 'spki', format: 'der' });
+          if (distrusted.has(createHash('sha256').update(spki).digest('hex'))) {
+            throw new Error(`The action runner still trusts an affected root: ${certificate.subject}`);
+          }
+        }
+        console.log(`Action runtime Node.js ${process.versions.node}: security baseline and bundled roots verified.`);
+        NODE
+
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
     - name: Get the version
       id: get_version
       run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3
+      uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
     - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
+      uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
     - name: Log in to GitHub Container Registry
-      uses: docker/login-action@v3
+      uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
       with:
         registry: ghcr.io
         username: ethgas-developer
         password: ${{ secrets.GHCR_TOKEN }}
 
     - name: Build and Push Multi-Platform Image
-      uses: docker/build-push-action@v6
+      uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
       with:
         context: .
         file: ${{ inputs.dockerfile }}
         platforms: linux/amd64,linux/arm64
+        pull: true
+        no-cache-filters: chef,runtime
         push: true
         tags: |
           ghcr.io/ethgas-developer/${{ inputs.image_name }}:latest
