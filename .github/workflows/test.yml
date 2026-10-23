@@ -31,9 +31,46 @@ jobs:
             echo "::error::The active runner has no executable Node.js 24 runtime."
             exit 1
           fi
+          node_version_allowed() {
+            [[ "$1" =~ ^v24\.([0-9]+)\.([0-9]+)$ ]] &&
+              (( BASH_REMATCH[1] > 22 || (BASH_REMATCH[1] == 22 && BASH_REMATCH[2] >= 1) ))
+          }
           version="$("$node" --version)"
-          if [[ ! "$version" =~ ^v24\.([0-9]+)\.([0-9]+)$ ]] ||
-             (( BASH_REMATCH[1] < 22 || (BASH_REMATCH[1] == 22 && BASH_REMATCH[2] < 1) )); then
+          if ! node_version_allowed "$version"; then
+            if [[ "${RUNNER_ENVIRONMENT:-}" != github-hosted ]]; then
+              echo "::error::Update the self-hosted runner's embedded Node.js $version to Node.js 24.22.1 or newer on the 24.x line."
+              exit 1
+            fi
+            # GitHub-hosted images can lag behind Node.js security releases.
+            # These archive hashes come from the official v24.22.1 SHASUMS256.txt.
+            case "${RUNNER_ARCH:-}" in
+              X64)
+                arch=x64
+                checksum=eb6728e77c576a35162c122c45ccadf224d89ff00abc8dae46cc2897c6002d7c
+                ;;
+              ARM64)
+                arch=arm64
+                checksum=33c37be234ba8bee041961047b19160f4d7d0f164e8e246f78bdd10feff148b3
+                ;;
+              *)
+                echo "::error::Unsupported runner architecture: ${RUNNER_ARCH:-unknown}."
+                exit 1
+                ;;
+            esac
+            echo "Updating the hosted runner's embedded Node.js $version to v24.22.1."
+            bootstrap_dir="$(mktemp -d "${RUNNER_TEMP:?}/node-runtime.XXXXXX")"
+            trap 'rm -rf "$bootstrap_dir"' EXIT
+            archive="node-v24.22.1-linux-$arch.tar.gz"
+            curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error --retry 3 \
+              --output "$bootstrap_dir/$archive" "https://nodejs.org/dist/v24.22.1/$archive"
+            printf '%s  %s\n' "$checksum" "$bootstrap_dir/$archive" | sha256sum --check --strict
+            tar -xzf "$bootstrap_dir/$archive" -C "$bootstrap_dir" --strip-components=1 \
+              "node-v24.22.1-linux-$arch/bin/node"
+            test "$("$bootstrap_dir/bin/node" --version)" = v24.22.1
+            sudo -n install -m 0755 "$bootstrap_dir/bin/node" "$node"
+            version="$("$node" --version)"
+          fi
+          if ! node_version_allowed "$version"; then
             echo "::error::The action runner uses Node.js $version; update its embedded runtime to Node.js 24.22.1 or newer on the 24.x line."
             exit 1
           fi
