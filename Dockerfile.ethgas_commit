@@ -1,26 +1,49 @@
-FROM lukemathwalker/cargo-chef:latest-rust-1 AS chef
+FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-slim-bookworm AS chef
 WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates openssl build-essential cmake perl git pkg-config libssl-dev libudev-dev libusb-1.0-0-dev protobuf-compiler libprotobuf-dev \
+    && test -f /usr/include/google/protobuf/descriptor.proto \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge '20250419~deb12u2' \
+    && rustup self update \
+    && test "$(printf '%s\n' 1.29.2 "$(rustup --version | cut -d ' ' -f 2)" | sort -V | head -n 1)" = 1.29.2 \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=bind,source=scripts/check-ca-trust.sh,target=/tmp/check-ca-trust.sh \
+    --mount=type=bind,source=tests/data/emudhra,target=/tmp/emudhra \
+    sh /tmp/check-ca-trust.sh /tmp/emudhra
 
 FROM chef AS planner
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
 FROM chef AS builder 
+ARG TARGETARCH
+# Avoid LLVM linker stalls when amd64 is built under QEMU on ARM hosts.
+ENV CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C linker-features=-lld"
 COPY --from=planner /app/recipe.json recipe.json
 
-RUN apt-get update && apt-get install -y protobuf-compiler
-
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,id=ethgas-cargo-registry-$TARGETARCH,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=ethgas-cargo-git-$TARGETARCH,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=ethgas-cargo-target-1.99.1-$TARGETARCH,target=/app/target,sharing=locked \
+    cargo chef cook --locked --release --recipe-path recipe.json
 
 COPY . .
-RUN cargo build --release --bin ethgas_commit
+RUN --mount=type=cache,id=ethgas-cargo-registry-$TARGETARCH,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,id=ethgas-cargo-git-$TARGETARCH,target=/usr/local/cargo/git,sharing=locked \
+    --mount=type=cache,id=ethgas-cargo-target-1.99.1-$TARGETARCH,target=/app/target,sharing=locked \
+    cargo test --locked --release --test tls_security \
+    && cargo build --locked --release --bin ethgas_commit \
+    && cp /app/target/release/ethgas_commit /app/ethgas_commit
 
 
-FROM ubuntu AS runtime
+FROM ubuntu:24.04 AS runtime
 WORKDIR /app
 
-RUN apt-get update
-RUN apt-get install -y openssl ca-certificates libssl3 libssl-dev
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates libssl3t64 libudev1 libusb-1.0-0 \
+    && dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge '20260816ubuntu0.24.04.1' \
+    && rm -rf /var/lib/apt/lists/*
+RUN --mount=type=bind,source=scripts/check-ca-trust.sh,target=/tmp/check-ca-trust.sh \
+    --mount=type=bind,source=tests/data/emudhra,target=/tmp/emudhra \
+    sh /tmp/check-ca-trust.sh /tmp/emudhra
 
-COPY --from=builder /app/target/release/ethgas_commit /usr/local/bin
+COPY --from=builder /app/ethgas_commit /usr/local/bin
 ENTRYPOINT ["/usr/local/bin/ethgas_commit"]

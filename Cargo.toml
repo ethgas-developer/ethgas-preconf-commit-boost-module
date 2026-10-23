@@ -75,3 +75,14 @@ path = "bin/ethgas_deposit.rs"
 
 [patch.crates-io]
 blstrs_plus = { git = "https://github.com/Commit-Boost/blstrs" }
+
+[dev-dependencies]
+log = "0.4"
+sha2 = "0.10.9"
+tempfile = "3.27"
+proptest = "1.11"
+toml = "0.8"
+tokio = { version = "1.37.0", features = ["test-util"] }
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs", "std", "tls12"] }
+webpki-roots = "1.0.10"
+webpki-root-certs = "1.0.10"
