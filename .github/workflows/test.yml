@@ -4,7 +4,7 @@ on:
   workflow_call:
   pull_request:
   push:
-    branches: [codex/backport-v1.0.8]
+    branches: [patch/backport-v1.0.8]
   workflow_dispatch:
 
 permissions:
