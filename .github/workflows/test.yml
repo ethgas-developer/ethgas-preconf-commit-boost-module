@@ -1,9 +1,10 @@
 name: Tests and Coverage
 
 on:
+  workflow_call:
   pull_request:
   push:
-    branches: [main]
+    branches: [codex/backport-v1.0.8]
   workflow_dispatch:
 
 permissions:
@@ -12,7 +13,7 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Verify action runtime security
         id: node_security

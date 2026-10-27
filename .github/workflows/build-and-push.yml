@@ -3,14 +3,14 @@ name: Build and Push ethgas_commit and related images
 on:
   push:
     tags:
-      - "v*"
-    paths:
-      - bin/ethgas_commit.rs
-      - bin/ethgas_deposit.rs
-      - bin/gen_jwt.rs
+      - "v1.0.*"
 
 jobs:
+  validate:
+    uses: ./.github/workflows/test.yml
+
   build-ethgas-commit:
+    needs: validate
     uses: ./.github/workflows/base.yml
     with:
       image_name: commitboost_ethgas_commit
@@ -19,6 +19,7 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 
   build-ethgas-deposit:
+    needs: validate
     uses: ./.github/workflows/base.yml
     with:
       image_name: commitboost_ethgas_deposit
@@ -27,6 +28,7 @@ jobs:
       GHCR_TOKEN: ${{ secrets.GHCR_TOKEN }}
 
   build-gen-jwt:
+    needs: validate
     uses: ./.github/workflows/base.yml
     with:
       image_name: commitboost_gen_jwt

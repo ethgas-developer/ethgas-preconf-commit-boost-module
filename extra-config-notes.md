@@ -99,7 +99,7 @@ function deposit(TokenTransfer[] memory tokenTransfers) external payable;
 
 ## Tests and coverage
 
-The suite uses isolated local HTTP fixtures, temporary files, subprocess environments,
+The backported suite uses isolated local HTTP fixtures, temporary files, subprocess environments,
 and an Anvil EVM. It never requires production credentials or a live network.
 Install Anvil (Foundry v1.8.5; set `ANVIL_BIN` if it is not on `PATH`) and run:
 
@@ -119,9 +119,10 @@ CI uses Rust 1.99.1 and requires at least **95% lines, regions, and functions**
 across all production sources in `src/` and `bin/`. Only files under `tests/`
 are excluded. Reports are written to `target/coverage.json` and
 `target/coverage/html/index.html`. Coverage percentages do not measure assertion
-quality or guarantee security; the suite also checks independent EIP-712/BLS
-encodings, replay boundaries, credential redaction, failed registration side
-effects, exact deposit value/calldata, receipts, and invalid configuration.
+quality or guarantee security; the suite checks legacy EIP-712 signing and signer
+request encodings, registration batches, exact deposit value/calldata, CLI
+configuration, and certificate trust. Tests preserve the v1.0.7 application
+contract rather than assuming later v1.1 behavior.
 Physical Ledger interaction requires a separate hardware check.
 
 The TLS regression suite checks the compromised eMudhra intermediate keys even
@@ -166,3 +167,30 @@ separate dependency maintenance and are not treated as a clean full audit.
 ### Debug cb_ethgas_commit locally
 - To debug without building docker image, expose 20000 port for `cb_signer` in `docker-compose.yml`
 - Then run `docker compose -f docker-compose.yml up cb_signer` and separately run `export CB_MODULE_ID=ETHGAS_COMMIT && export CB_SIGNER_JWT=??? && export CB_SIGNER_URL="http://localhost:20000" && export CB_CONFIG="./config.toml" && cargo run --bin ethgas_commit`
+## v1.0.8 maintenance release
+
+This release backports the eMudhra certificate, system CA, container, and CI
+security fixes from v1.1.4 while preserving v1.0.7 application and configuration
+behavior. Commit-Boost remains at v0.9.6, revision
+`d6d2eed4f67b5ba1f97007abfe067883e35c7620`. The original keystore dependency
+and upstream PBS/signer image versions are retained.
+
+Use these versioned images:
+
+- `ghcr.io/ethgas-developer/commitboost_ethgas_commit:v1.0.8`
+- `ghcr.io/ethgas-developer/commitboost_ethgas_deposit:v1.0.8`
+- `ghcr.io/ethgas-developer/commitboost_gen_jwt:v1.0.8`
+
+The maintenance workflow publishes both Linux AMD64 and ARM64. It never writes
+an application `latest` tag and uses a separate `buildcache-v1.0` registry cache.
+The tag must match the package version. Tests, coverage, and the TLS advisory
+gate must pass before publishing begins. Published images are checked on both
+architectures for source revision, CA rejection, shared libraries, and startup
+using isolated test settings. The three image jobs publish independently; all
+must succeed before the release is complete. Changing deployment configuration
+or replacing running containers is a separate operator action.
+
+Maintenance tests retain the legacy JWT mapping (`CB_JWT_<MODULE_ID>`, `CB_JWTS`,
+and `CB_SIGNER_JWT`) and the legacy keystore environment variable names,
+including `*_NODE_OPERATOR_OWNER_PASSOWRDS`. Export tests run in child processes
+because this version writes export files to its current working directory.

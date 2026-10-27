@@ -1483,3 +1483,8 @@ async fn main() -> Result<()> {
     }
     Ok(())
 }
+
+
+#[cfg(test)]
+#[path = "../tests/unit/commit.rs"]
+mod tests;

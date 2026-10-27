@@ -98,9 +98,30 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-    - name: Get the version
+    - name: Verify runner system CA trust
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates openssl
+        dpkg --compare-versions "$(dpkg-query -W -f='${Version}' ca-certificates)" ge '20260816ubuntu0.24.04.1'
+        sh scripts/check-ca-trust.sh tests/data/emudhra
+
+    - name: Verify maintenance release version
       id: get_version
-      run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 - <<'PYTHON'
+        import os, re, tomllib
+        from pathlib import Path
+        tag = os.environ["GITHUB_REF_NAME"]
+        version = tomllib.loads(Path("Cargo.toml").read_text())["package"]["version"]
+        if os.environ["GITHUB_REF_TYPE"] != "tag" or not re.fullmatch(r"v1\.0\.[0-9]+", tag) or tag != f"v{version}":
+            raise SystemExit(f"Maintenance tag {tag!r} does not match package version {version!r}")
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write(f"version={tag}\n")
+        PYTHON
 
     - name: Set up QEMU
       uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
@@ -125,7 +146,14 @@ jobs:
         no-cache-filters: chef,runtime
         push: true
         tags: |
-          ghcr.io/ethgas-developer/${{ inputs.image_name }}:latest
           ghcr.io/ethgas-developer/${{ inputs.image_name }}:${{ steps.get_version.outputs.version }}
-        cache-from: type=registry,ref=ghcr.io/ethgas-developer/${{ inputs.image_name }}:buildcache
-        cache-to: type=registry,ref=ghcr.io/ethgas-developer/${{ inputs.image_name }}:buildcache,mode=max
+        labels: |
+          org.opencontainers.image.version=${{ steps.get_version.outputs.version }}
+          org.opencontainers.image.revision=${{ github.sha }}
+          org.opencontainers.image.source=https://github.com/${{ github.repository }}
+        cache-from: type=registry,ref=ghcr.io/ethgas-developer/${{ inputs.image_name }}:buildcache-v1.0
+        cache-to: type=registry,ref=ghcr.io/ethgas-developer/${{ inputs.image_name }}:buildcache-v1.0,mode=max
+
+    - name: Verify published images on both architectures
+      shell: bash
+      run: scripts/smoke-release-image.sh "ghcr.io/ethgas-developer/${{ inputs.image_name }}:${{ steps.get_version.outputs.version }}" "${{ github.sha }}"
