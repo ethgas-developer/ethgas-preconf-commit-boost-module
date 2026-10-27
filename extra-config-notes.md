@@ -172,8 +172,10 @@ separate dependency maintenance and are not treated as a clean full audit.
 This release backports the eMudhra certificate, system CA, container, and CI
 security fixes from v1.1.4 while preserving v1.0.7 application and configuration
 behavior. Commit-Boost remains at v0.9.6, revision
-`d6d2eed4f67b5ba1f97007abfe067883e35c7620`. The original keystore dependency
-and upstream PBS/signer image versions are retained.
+`d6d2eed4f67b5ba1f97007abfe067883e35c7620`. The keystore remains at the identical original commit
+`80dc23f7cc325654a0f4d711097423e1127e8cc8`, fetched from the public ETHGas
+mirror because the old p2p-org URL is unavailable to fresh CI builds. Its Git
+tree is unchanged. Upstream PBS/signer image versions are retained.
 
 Use these versioned images:
 
