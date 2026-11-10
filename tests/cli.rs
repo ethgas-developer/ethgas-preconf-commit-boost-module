@@ -584,3 +584,31 @@ async fn missing_password_and_deposit_rpc_configuration_are_visible_errors() {
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("Failed to get RPC URL"));
 }
+
+#[tokio::test]
+async fn example_configs_validate_with_the_pinned_commit_boost_schema() {
+    let server = Server::new().await;
+    for (filename, chain) in [
+        ("config.example.mainnet.toml", "Mainnet"),
+        ("config.example.hoodi.toml", "Hoodi"),
+    ] {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(filename);
+        let mut document: toml::Value = std::fs::read_to_string(&path).unwrap().parse().unwrap();
+        assert_eq!(document["chain"].as_str(), Some(chain));
+        assert_eq!(document["signer"]["tls_mode"]["type"].as_str(), Some("insecure"));
+        for relay in document["relays"].as_array().unwrap() {
+            assert!(relay.get("validator_registration_batch_size").is_none());
+        }
+        // Replace only module credentials/business logic and disable metric/log file writes.
+        // The binary loads the example's signer, PBS, and relay sections using upstream types.
+        document["modules"] = toml::Value::try_from(vec![module(&server.url)]).unwrap();
+        document["metrics"]["enabled"] = toml::Value::Boolean(false);
+        document["logs"]["file"]["enabled"] = toml::Value::Boolean(false);
+        let dir = tempfile::tempdir().unwrap();
+        let config = dir.path().join("config.toml");
+        std::fs::write(&config, toml::to_string(&document).unwrap()).unwrap();
+        let result = output(&mut command(env!("CARGO_BIN_EXE_ethgas_commit"), dir.path(), &config)).await;
+        assert!(result.status.success(), "{filename}: {} {}",
+            String::from_utf8_lossy(&result.stdout), String::from_utf8_lossy(&result.stderr));
+    }
+}

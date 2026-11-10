@@ -4,7 +4,7 @@
 # Chain spec ID. Supported values:
 # A network ID. Supported values: Mainnet, Holesky, Sepolia, Hoodi. Lower case values e.g. "mainnet" are also accepted
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
-# A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
+# A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000", fulu_fork_slot = 5283840, chain_id = 17000 }.
 chain = "Mainnet" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module.
@@ -107,13 +107,22 @@ id = "ethgas-us"
 # Relay URL in the format scheme://pubkey@host.
 url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
 
-# Headers to send with each request for this relay.
+# Headers to send with each request for this relay. Values can be literals, files, or environment variables.
+# File and environment values are read at startup and on every config reload.
+# Mount secret files or pass environment variables into the PBS container when using Docker Compose.
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
+# headers = { X-Api-Key = { file = "/run/secrets/relay-key" } }
+# headers = { X-Api-Key = { env = "RELAY_API_KEY" } }
 
 # GET parameters to add to each request URL for this relay.
 # OPTIONAL
 # get_params = { param1 = "value1", param2 = "value2" }
+
+# How to fetch headers: "http" for polling, or "stream" for websocket bid updates.
+# Use "stream" only with a relay that supports it and a UUID API key in headers.X-Api-Key.
+# OPTIONAL, DEFAULT: "http"
+get_header = "http"
 
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
 # NOTE: if neither `target_first_request_ms` nor `frequency_get_header_ms` is set, this flag has no effect.
@@ -149,10 +158,6 @@ target_first_request_ms = 0
 # Frequency in ms to send get_header requests.
 # OPTIONAL
 frequency_get_header_ms = 100
-
-# Maximum number of validators to register in a single request.
-# OPTIONAL, DEFAULT: "" (unlimited)
-validator_registration_batch_size = ""
 
 [[relays]]
 id = "ethgas-eu"
@@ -243,6 +248,7 @@ frequency_get_header_ms = 100
 # Supported registries:
 #   - Lido: NodeOperatorsRegistry
 #   - SSV: SSV API
+#   - Stader: Permissioned/Permissionless NodePool (mainnet only, requires pbs.rpc_url)
 # OPTIONAL
 # loader = "/tests/data/mux_keys.json"
 
@@ -257,8 +263,14 @@ frequency_get_header_ms = 100
 # Example of loading keys from the Lido registry
 # loader = { registry = "lido", node_operator_id = 8, lido_module_id = 1, enable_refreshing = false }
 
+# Curated Module v2 (CMv2): lido_module_id = 4 on mainnet, 5 on hoodi
+# loader = { registry = "lido", node_operator_id = 8, lido_module_id = 4, enable_refreshing = false }
+
 # Example of loading keys from an SSV API
 # loader = { registry = "ssv", node_operator_id = 8, enable_refreshing = false }
+
+# Example of loading keys from Stader (mainnet only)
+# loader = { registry = "stader", node_operator_id = 8, stader_pool = "permissionless", enable_refreshing = false }
 
 # OPTIONAL
 # timeout_get_header_ms = 950
@@ -268,7 +280,7 @@ frequency_get_header_ms = 100
 
 # For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys.
 # Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored.
-# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms).
+# The fields specified here are the same as in [[relays]] (headers, get_params, get_header, enable_timing_games, target_first_request_ms, frequency_get_header_ms).
 # [[mux.relays]]
 # id = "ethgas-us"
 # url = "https://0x88ef3061f598101ca713d556cf757763d9be93d33c3092d3ab6334a36855b6b4a4020528dd533a62d25ea6648251e62e@us-relay.ethgas.com"
@@ -297,6 +309,10 @@ frequency_get_header_ms = 100
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module).
 [signer]
+# Docker image to use for the Signer module.
+# OPTIONAL, DEFAULT: ghcr.io/commit-boost/commit-boost:latest
+# docker_image = "ghcr.io/commit-boost/commit-boost:latest"
+
 # Host to bind the Signer API server to.
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
@@ -312,6 +328,20 @@ jwt_auth_fail_limit = 3
 # How long to block a client from Signer access, in seconds, if it failed JWT authentication too many times.
 # OPTIONAL, DEFAULT: 300
 jwt_auth_fail_timeout_seconds = 300
+
+# Signer API TLS mode. This revision defaults to insecure (HTTP).
+# This matches CB_SIGNER_URL=http://cb_signer:20000 in the supplied Docker Compose files.
+# For TLS, use type = "certificate" and path = "/certs", provision cert.pem and key.pem,
+# mount both files into the signer and only cert.pem into modules, and use an HTTPS CB_SIGNER_URL.
+[signer.tls_mode]
+type = "insecure"
+
+# If the signer is behind a trusted reverse proxy, configure how to extract the client IP.
+# Omit this section to use the TCP peer address.
+# [signer.reverse_proxy]
+# type = "unique"
+# header = "X-Real-IP"
+# Alternatively, use type = "rightmost", header = "X-Forwarded-For", and trusted_count = 1.
 
 # For Remote signer:
 # [signer.remote]
@@ -363,7 +393,7 @@ jwt_auth_fail_timeout_seconds = 300
 #   - File: load keys from a plain text file (unsafe, use only for testing purposes)
 #   - ValidatorsDir: load keys from a `keys` and `secrets` file/folder (ERC-2335 style keystores). More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/)
 [signer.local.loader]
-# Format of the keystore (lighthouse, prysm, teku or lodestar)
+# Format of the keystore (lighthouse, prysm, teku, lodestar, or nimbus)
 format = "lighthouse"
 
 # Full path to the keys directory
