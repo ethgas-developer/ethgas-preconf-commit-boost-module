@@ -1,6 +1,6 @@
 services:
   cb_pbs:
-    image: ghcr.io/commit-boost/commit-boost:v0.10.0
+    image: ghcr.io/commit-boost/commit-boost:v0.12.0-rc1
     container_name: cb_pbs
     ports:
     - 18550:18550
@@ -15,7 +15,7 @@ services:
     command:
     - pbs
   cb_signer:
-    image: ghcr.io/commit-boost/commit-boost:v0.10.0
+    image: ghcr.io/commit-boost/commit-boost:v0.12.0-rc1
     container_name: cb_signer
     environment:
       CB_CONFIG: /cb-config.toml

@@ -4,7 +4,7 @@
 # Chain spec ID. Supported values:
 # A network ID. Supported values: Mainnet, Holesky, Sepolia, Hoodi. Lower case values e.g. "mainnet" are also accepted
 # A custom object, e.g., chain = { genesis_time_secs = 1695902400, path = "/path/to/spec.json" }, with a path to a chain spec file, either in .json format (e.g., as returned by the beacon endpoint /eth/v1/config/spec), or in .yml format (see examples in tests/data).
-# A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000" }.
+# A custom object, e.g., chain = { genesis_time_secs = 1695902400, slot_time_secs = 12, genesis_fork_version = "0x01017000", fulu_fork_slot = 5283840, chain_id = 17000 }. All fields are required.
 chain = "Hoodi" # this affect BUILDER_DOMAIN used in signing data root hash
 
 # Configuration for the PBS module.
@@ -37,6 +37,15 @@ wait_all_registrations = true
 # OPTIONAL, DEFAULT: 950
 timeout_get_header_ms = 950
 
+# (unreleased, from v0.12.0-rc1) ePBS bids only: ms kept back from the beacon node's X-Timeout-Ms deadline for
+# Commit-Boost's answer to reach the beacon node. The default suits a beacon node on the same host; raise it when they
+# run on different hosts. Must be above 0 and under one slot, 12000 on mainnet (https://commit-boost.github.io/commit-boost-client/get_started/epbs#timing)
+# OPTIONAL, DEFAULT: 20
+# proposer_deadline_buffer_ms = 20
+# (unreleased, from v0.12.0-rc1) ePBS only: whether to dial a builder the auth data names when none of the key's relay entries match it, else answer 400 (https://commit-boost.github.io/commit-boost-client/get_started/epbs#builders-outside-your-config)
+# OPTIONAL, DEFAULT: true
+# dial_unconfigured_builders = true
+
 # Timeout in milliseconds for the `submit_blinded_block` call to relays.
 # OPTIONAL, DEFAULT: 4000
 timeout_get_payload_ms = 4000
@@ -68,7 +77,7 @@ extra_validation_enabled = false
 
 # Execution Layer RPC url to use for extra validation and the deposit module.
 # OPTIONAL
-# rpc_url = "rpc_url = "https://ethereum-hoodi-rpc.publicnode.com"
+# rpc_url = "https://ethereum-hoodi-rpc.publicnode.com"
 
 # URL of your local SSV node API endpoint, if you have a mux that targets an SSV node operator
 # OPTIONAL, DEFAULT: "http://localhost:16000/v1/"
@@ -107,13 +116,27 @@ id = "ethgas"
 # Relay URL in the format scheme://pubkey@host.
 url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
 
-# Headers to send with each request for this relay.
+# Headers to send with each request for this relay. Values can be literals, file references, or environment references.
+# headers = { X-Api-Key = { file = "/run/secrets/relay-key" } }
+# headers = { X-Api-Key = { env = "RELAY_API_KEY" } }
+# File and environment values are read at startup and on every config reload.
 # OPTIONAL
 # headers = { X-MyCustomHeader = "MyCustomValue" }
 
 # GET parameters to add to each request URL for this relay.
 # OPTIONAL
 # get_params = { param1 = "value1", param2 = "value2" }
+
+# How to fetch headers from this relay.
+#   "http"     -> one request per get_header, at the relay url above
+#   "stream"   -> websocket stream of bid updates, only for relays that support it. Connects to
+#                 ws(s)://<relay url>/eth/v1/builder/header_stream/{slot}/{parent_hash}/{pubkey}.
+#                 Requires a UUID api key, set it in `headers` field above under the `X-Api-Key`
+#                 name; it is sent on the websocket handshake. Can use
+#                 https://www.uuidgenerator.net/version4 to generate one.
+#                 (unreleased, from v0.12.0-rc1) After Gloas this also streams ePBS bids (https://commit-boost.github.io/commit-boost-client/get_started/epbs#bid-streaming)
+# OPTIONAL, DEFAULT: "http"
+# get_header = "http"
 
 # Whether to enable timing games, as tuned by `target_first_request_ms` and `frequency_get_header_ms`.
 # NOTE: if neither `target_first_request_ms` nor `frequency_get_header_ms` is set, this flag has no effect.
@@ -150,15 +173,11 @@ target_first_request_ms = 0
 # OPTIONAL
 frequency_get_header_ms = 100
 
-# Maximum number of validators to register in a single request.
-# OPTIONAL, DEFAULT: "" (unlimited)
-validator_registration_batch_size = ""
-
 # Configuration for the PBS multiplexers, which enable different 
 # configs to be used for get header requests, depending on validator pubkey.
 # Note that:
 # - multiple sets of keys can be defined by adding multiple [[mux]] sections. The validator pubkey sets need to be disjoint
-# - the mux is only used for get header requests
+# - the mux is used for get header requests, and ePBS bid and builder preferences requests
 # - if any value is missing from the mux config, the default value from the main config will be used
 # [[mux]]
 # Unique ID for the mux config
@@ -174,8 +193,9 @@ validator_registration_batch_size = ""
 
 # Path to a file containing a list of validator pubkeys or details of a registry to load keys from.
 # Supported registries:
-#   - Lido: NodeOperatorsRegistry
+#   - Lido: staking module registries (requires pbs.rpc_url; lido_module_id defaults to 1)
 #   - SSV: SSV API
+#   - Stader: Permissioned/Permissionless NodePool (mainnet only; requires pbs.rpc_url)
 # OPTIONAL
 # loader = "/tests/data/mux_keys.json"
 
@@ -190,6 +210,9 @@ validator_registration_batch_size = ""
 # Example of loading keys from the Lido registry
 # loader = { registry = "lido", node_operator_id = 8, lido_module_id = 1, enable_refreshing = false }
 
+# Lido Curated Module v2 (CMv2)
+# loader = { registry = "lido", node_operator_id = 8, lido_module_id = 5, enable_refreshing = false }
+
 # Example of loading keys from an SSV API
 # loader = { registry = "ssv", node_operator_id = 8, enable_refreshing = false }
 
@@ -201,18 +224,21 @@ validator_registration_batch_size = ""
 
 # For each mux, one or more [[mux.relays]] can be defined, which will be used for the matching validator pubkeys.
 # Only the relays defined here will be used, and the relays defined in the main [[relays]] config will be ignored.
-# The fields specified here are the same as in [[relays]] (headers, get_params, enable_timing_games, target_first_request_ms, frequency_get_header_ms).
+# The fields specified here are the same as in [[relays]] (headers, get_params, get_header, enable_timing_games, target_first_request_ms, frequency_get_header_ms).
 # [[mux.relays]]
 # id = "ethgas"
 # url = "https://0xb20c3fe59db9c3655088839ef3d972878d182eb745afd8abb1dd2abf6c14f93cd5934ed4446a5fe1ba039e2bc0cf1011@hoodi-relay.ethgas.com"
 
 # Configuration for the Signer Module, only required if any `commit` module is present, or if `pbs.with_signer = true`.
-# Currently three types of Signer modules are supported (only one can be used at a time):
-#   - Remote: a remote Web3Signer instance
+# Currently two types of Signer modules are supported (only one can be used at a time):
 #   - Dirk: a remote Dirk instance
 #   - Local: a local Signer module
 # More details on the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/#signer-module).
 [signer]
+# Docker image to use for the Signer module.
+# OPTIONAL, DEFAULT: ghcr.io/commit-boost/commit-boost:latest
+# docker_image = "ghcr.io/commit-boost/commit-boost:latest"
+
 # Host to bind the Signer API server to.
 # OPTIONAL, DEFAULT: 127.0.0.1
 host = "0.0.0.0"
@@ -229,7 +255,30 @@ jwt_auth_fail_limit = 3
 # OPTIONAL, DEFAULT: 300
 jwt_auth_fail_timeout_seconds = 300
 
+# HTTP header to use to determine the real client IP, if the Signer is behind a proxy (e.g. nginx)
+# OPTIONAL. If missing, the client IP will be taken directly from the TCP connection.
+# [signer.reverse_proxy]
+# Type of reverse proxy configuration. Supported values:
+# - unique: use a single HTTP header value as the client IP.
+# - rightmost: use the rightmost IP from a comma-separated list of IPs in the HTTP header.
+# type = "unique"
+# Unique: HTTP header name to use to determine the real client IP. If the header appears multiple times, the request will be rejected.
+# header = "X-Real-IP"
+# Rightmost: HTTP header name to use to determine the real client IP from a comma-separated list of IPs. If the header appears multiple times, the last value will be used.
+# header = "X-Forwarded-For"
+# Rightmost: number of trusted proxies in front of the Signer, whose IPs will be skipped when extracting the client IP from the rightmost side of the list. Must be greater than 0.
+# trusted_count = 1
+
+# [signer.tls_mode]
+# How to use TLS for the Signer's HTTP server; two modes are supported:
+# - type = "insecure": disable TLS, so the server runs in HTTP mode (not recommended for production).
+# - type = "certificate": Use TLS. Include a property named "path" below this with the provided path; `path` should be a directory containing existing `cert.pem` and `key.pem` files to use. They are NOT auto-generated: the Signer fails to start if either file is missing.
+# OPTIONAL, DEFAULT:
+# type = "insecure"
+
 # For Remote signer:
+# NOT IMPLEMENTED. This configuration parses, but the Signer rejects it at startup.
+# Use Dirk for remote signing.
 # [signer.remote]
 # URL of the Web3Signer instance.
 # url = "https://remote.signer.url"
@@ -262,12 +311,12 @@ jwt_auth_fail_timeout_seconds = 300
 # url = "https://localhost:8881"
 
 # Wallets to load consensus keys from.
-# accounts = ["Wallet1", "DistributedWallet"]
+# wallets = ["Wallet1", "DistributedWallet"]
 
 # [[signer.dirk.hosts]]
 # server_name = "localhost-2"
 # url = "https://localhost:8882"
-# accounts = ["Wallet2", "DistributedWallet"]
+# wallets = ["Wallet2", "DistributedWallet"]
 
 # Configuration for how the Signer module should store proxy delegations.
 # OPTIONAL
@@ -279,7 +328,7 @@ jwt_auth_fail_timeout_seconds = 300
 #   - File: load keys from a plain text file (unsafe, use only for testing purposes)
 #   - ValidatorsDir: load keys from a `keys` and `secrets` file/folder (ERC-2335 style keystores). More details can be found in the docs (https://commit-boost.github.io/commit-boost-client/get_started/configuration/)
 [signer.local.loader]
-# Format of the keystore (lighthouse, prysm, teku or lodestar)
+# Format of the keystore (lighthouse, prysm, teku, lodestar or nimbus)
 format = "lighthouse"
 
 # Full path to the keys directory

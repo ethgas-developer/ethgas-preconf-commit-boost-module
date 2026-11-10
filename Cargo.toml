@@ -5,7 +5,7 @@ rust-version = "1.91"
 edition = "2024"
 
 [dependencies]
-commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "eeff25750c01f4adfc95fc08d69d541ace8e4087" }
+commit-boost = { git = "https://github.com/Commit-Boost/commit-boost-client", rev = "afab7f19933faee523c728ff667df836e3799b95" }
 
 # ethereum
 alloy = { version = "1.1.0", features = [
@@ -76,6 +76,13 @@ path = "bin/ethgas_deposit.rs"
 
 [patch.crates-io]
 blstrs_plus = { git = "https://github.com/Commit-Boost/blstrs" }
+# Cargo does not inherit dependency patches; mirror Commit-Boost's Lighthouse SSZ stack.
+ssz_types = { git = "https://github.com/sigp/ssz_types", rev = "9203d56ad2d7bc5f12133d043e085843f81edcd6" }
+milhouse = { git = "https://github.com/sigp/milhouse", rev = "c70f128976ac0d60ea65a978dabd117a921c36ee" }
+ethereum_ssz = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+ethereum_ssz_derive = { git = "https://github.com/sigp/ethereum_ssz", rev = "2059c21ba52cd3a7e39a8ad537012b761812a393" }
+tree_hash = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
+tree_hash_derive = { git = "https://github.com/sigp/tree_hash", rev = "03d9fa474586c125f306dd7a00cf46284575a01f" }
 
 [dev-dependencies]
 log = "0.4"
